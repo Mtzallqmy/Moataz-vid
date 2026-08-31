@@ -37,7 +37,8 @@ class SilenceCommandPlanner(private val ids: EditorIdFactory, private val policy
             if (silent.sourceRange.duration.value <= keep) return@mapNotNull null
             val raw = TimeRangeUs(TimeUs(silent.sourceRange.start.value + keep / 2), TimeUs(silent.sourceRange.endExclusive.value - (keep - keep / 2)))
             val snapped = if (words.isEmpty()) raw else WordSafeCutSnapper().snap(raw, words.filter { it.sourceId == silent.sourceId }, policy.wordSafePolicy)
-            if (snapped.endExclusive.value > requireNotNull(clip.sourceRange).endExclusive.value || snapped.start < clip.sourceRange.start) return@mapNotNull null
+            val clipSourceRange = requireNotNull(clip.sourceRange)
+            if (snapped.endExclusive.value > clipSourceRange.endExclusive.value || snapped.start < clipSourceRange.start) return@mapNotNull null
             EditOperation.RemoveRange(clip.id, snapped, ids.clip("silence_left"), ids.clip("silence_right"), "long_silence")
         }.toList()
         val estimate = DurationUs((project.duration.value - operations.sumOf { it.sourceRange.duration.value }).coerceAtLeast(0))

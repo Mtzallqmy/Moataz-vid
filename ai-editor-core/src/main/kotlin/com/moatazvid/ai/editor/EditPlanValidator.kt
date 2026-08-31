@@ -31,7 +31,7 @@ class EditPlanValidator(
             fun sourceRange(sourceId: SourceId, range: TimeRangeUs) {
                 val source = sources[sourceId]
                 if (source == null) errors += error("UNKNOWN_SOURCE", "$path.sourceId", sourceId.value)
-                else if (source.duration != null && range.endExclusive.value > source.duration.value) errors += error("SOURCE_RANGE_OUT_OF_BOUNDS", "$path.sourceRange", sourceId.value)
+                else source.duration?.let { duration -> if (range.endExclusive.value > duration.value) errors += error("SOURCE_RANGE_OUT_OF_BOUNDS", "$path.sourceRange", sourceId.value) }
                 project.protectedRanges.filter { it.active && it.sourceId == sourceId && it.sourceRange.overlaps(range) }.forEach {
                     errors += error("PROTECTED_RANGE", "$path.sourceRange", it.reason)
                 }

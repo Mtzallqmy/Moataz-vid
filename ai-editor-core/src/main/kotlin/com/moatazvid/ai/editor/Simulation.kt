@@ -102,10 +102,11 @@ object TimelineOperationApplier {
             }
             is EditOperation.SplitClip -> {
                 val clip = find(operation.clipId); val offset = operation.atTimeline.value - clip.timelineStart.value; val speed = properties[clip.id]?.speed ?: 1.0
-                val splitSource = requireNotNull(clip.sourceRange).start.value + (offset * speed).roundToLong()
+                val clipSourceRange = requireNotNull(clip.sourceRange)
+                val splitSource = clipSourceRange.start.value + (offset * speed).roundToLong()
                 items.remove(clip)
-                items += clip.copy(id = operation.leftClipId, timelineDuration = DurationUs(offset), sourceRange = TimeRangeUs(requireNotNull(clip.sourceRange).start, TimeUs(splitSource)))
-                items += clip.copy(id = operation.rightClipId, timelineStart = operation.atTimeline, timelineDuration = DurationUs(clip.timelineDuration.value - offset), sourceRange = TimeRangeUs(TimeUs(splitSource), clip.sourceRange.endExclusive))
+                items += clip.copy(id = operation.leftClipId, timelineDuration = DurationUs(offset), sourceRange = TimeRangeUs(clipSourceRange.start, TimeUs(splitSource)))
+                items += clip.copy(id = operation.rightClipId, timelineStart = operation.atTimeline, timelineDuration = DurationUs(clip.timelineDuration.value - offset), sourceRange = TimeRangeUs(TimeUs(splitSource), clipSourceRange.endExclusive))
                 properties.remove(clip.id)?.let { properties[operation.leftClipId] = it; properties[operation.rightClipId] = it }
             }
             is EditOperation.RemoveRange -> {
