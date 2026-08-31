@@ -3,6 +3,7 @@ kotlin = "2.2.21"
 serialization = "1.9.0"
 coroutines = "1.10.2"
 junit = "5.13.4"
+junit-platform = "1.13.4"
 android-gradle = "9.0.0"
 ksp = "2.2.21-2.0.4"
 room3 = "3.0.2"
@@ -14,6 +15,7 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
 room3-runtime = { module = "androidx.room3:room3-runtime", version.ref = "room3" }
 room3-compiler = { module = "androidx.room3:room3-compiler", version.ref = "room3" }
 room3-testing = { module = "androidx.room3:room3-testing", version.ref = "room3" }
