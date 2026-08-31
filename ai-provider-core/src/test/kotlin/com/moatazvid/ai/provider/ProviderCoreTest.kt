@@ -21,7 +21,7 @@ class ProviderCoreTest {
 
     @Test fun `model listing normalizes unknown metadata`() = runBlocking {
         val transport = FakeTransport(HttpResponse(200, emptyMap(), """{"data":[{"id":"model-a"}]}"""))
-        val provider = CustomOpenAiCompatibleProvider(profile(), transport, MemorySecrets())
+        val provider = CustomOpenAiCompatibleProvider(profile(AuthMode.NONE), transport, MemorySecrets())
         val result = provider.listModels() as LlmResult.Success
         assertEquals("model-a", result.value.single().id)
         assertNull(result.value.single().contextLength)
@@ -58,7 +58,8 @@ class ProviderCoreTest {
         assertTrue(secrets.deleteSecret(ProviderId("p"))); assertNull(secrets.readSecret(ProviderId("p")))
     }
 
-    private fun profile() = ProviderProfile(ProviderId("p"), "Test", ProviderType.OPENAI_COMPATIBLE, "https://host.test", "keystore:p", "model-a")
+    private fun profile(authMode: AuthMode = AuthMode.BEARER) = ProviderProfile(ProviderId("p"), "Test", ProviderType.OPENAI_COMPATIBLE,
+        "https://host.test", if (authMode == AuthMode.NONE) null else "keystore:p", "model-a", authMode = authMode)
 }
 
 private class FakeTransport(private val response: HttpResponse) : HttpTransport {
