@@ -15,7 +15,8 @@ class AutosaveCoordinator<T>(
     private val writer: suspend (T) -> Unit,
 ) : AutoCloseable {
     private val channel = Channel<SaveRequest<T>>(Channel.UNLIMITED)
-    private val job = scope.launch(Dispatchers.Default) {
+    // Respect the caller's dispatcher: production supplies an IO scope, while tests use virtual time.
+    private val job = scope.launch {
         var pending: T? = null
         while (isActive) {
             val request = withTimeoutOrNull(debounce) { channel.receive() }
@@ -49,4 +50,3 @@ class AutosaveCoordinator<T>(
         data class Immediate<T>(val value: T, val ack: CompletableDeferred<Unit>) : SaveRequest<T>
     }
 }
-
