@@ -19,7 +19,13 @@ class AutosaveCoordinator<T>(
     private val job = scope.launch {
         var pending: T? = null
         while (isActive) {
-            val request = withTimeoutOrNull(debounce) { channel.receive() }
+            val received = withTimeoutOrNull(debounce) { channel.receiveCatching() }
+            if (received == null) {
+                pending?.let { writer(it) }
+                pending = null
+                continue
+            }
+            val request = received.getOrNull() ?: break
             when (request) {
                 is SaveRequest.Debounced -> pending = request.value
                 is SaveRequest.Immediate -> {
@@ -27,7 +33,6 @@ class AutosaveCoordinator<T>(
                     writer(request.value)
                     request.ack.complete(Unit)
                 }
-                null -> pending?.let { writer(it) }.also { pending = null }
             }
         }
     }
@@ -41,8 +46,8 @@ class AutosaveCoordinator<T>(
     }
 
     override fun close() {
-        channel.close()
         job.cancel()
+        channel.close()
     }
 
     private sealed interface SaveRequest<T> {
