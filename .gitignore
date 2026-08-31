@@ -1,0 +1,34 @@
+# Android / Gradle
+.gradle/
+build/
+**/build/
+local.properties
+.idea/
+*.iml
+
+# Signing and secrets
+*.jks
+*.keystore
+*.properties.local
+.env
+
+# Native build output
+.cxx/
+.externalNativeBuild/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+
+# Generated media and project data
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.wav
+*.aac
+*.proxy.*
+
+!src/test/resources/**
+!src/androidTest/resources/**
+
