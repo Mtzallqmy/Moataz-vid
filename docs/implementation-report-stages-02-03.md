@@ -49,7 +49,13 @@ Editor Core يصدر Graph immutable مربوطًا بـrevision. Adapter يحو
 Moataz vid core smoke tests: PASS
 ```
 
-Gradle dependency resolution تعذر في بيئة العمل بسبب وصول Java إلى mirror، لذلك استعمل compiler distribution مباشرة. Android/Room/Media3 instrumented tests لم تعمل هنا لعدم وجود Android SDK/device.
+كما نجح GitHub Actions `Core CI` في ترجمة وتشغيل جميع اختبارات Gradle لوحدات:
+
+- `core-model`
+- `storage-core`
+- `media-engine`
+
+Android/Room/Media3 instrumented tests لم تعمل في بيئة التنفيذ المحلية لعدم وجود Android SDK/device، وتبقى ضمن مصفوفة الاختبارات التالية.
 
 ## H) القيود
 
@@ -70,4 +76,3 @@ Gradle dependency resolution تعذر في بيئة العمل بسبب وصول
 ## J) بداية المرحلتين الرابعة والخامسة — دون تنفيذ
 
 المرحلة الرابعة يجب أن تبدأ بـEditor Core command model وvalidators/simulator وتطبيق EditPlan schema فوق `TimelineRepository` وRenderGraph compiler. المرحلة الخامسة تبدأ بالتحليل المحلي: probe، waveform، silence/scene indexes، transcript interfaces فقط، ثم Whisper بعد اعتماد الخصوصية والموارد.
-
