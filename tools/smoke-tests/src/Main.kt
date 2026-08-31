@@ -3,6 +3,7 @@ import com.moatazvid.media.*
 import com.moatazvid.storage.*
 import com.moatazvid.speech.*
 import com.moatazvid.ai.provider.*
+import com.moatazvid.ai.editor.*
 import java.nio.file.Files
 
 private fun checkCondition(value: Boolean, message: String) {
@@ -82,6 +83,8 @@ fun main() {
     checkCondition(BaseUrlNormalizer.normalize("https://example.test/v1/") == "https://example.test/v1", "provider base URL")
     checkCondition(BaseUrlNormalizer.resolve("https://example.test/v1", "/v1/chat/completions") == "https://example.test/v1/chat/completions", "no duplicate v1")
     checkCondition(RedactingNetworkLogger(true).requestSummary(HttpRequest(RequestId("r"), "POST", "https://example.test", mapOf("Authorization" to "Bearer secret"), "private", 1_000, true)).contains("<redacted>"), "secret redaction")
+    checkCondition(ArabicIntentClassifier().classify("احذف الصمت").intent == AiIntent.EDIT_PROJECT, "Arabic edit intent")
+    checkCondition(ArabicIntentClassifier().classify("لا تحذف السعر").intent == AiIntent.PROJECT_CONSTRAINT, "Arabic constraint intent")
 
     println("Moataz vid core smoke tests: PASS")
 }

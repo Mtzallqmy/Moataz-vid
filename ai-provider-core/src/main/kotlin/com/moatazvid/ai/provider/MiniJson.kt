@@ -40,7 +40,8 @@ object MiniJson {
     }
 }
 
-internal fun JsonValue.objectOrNull() = (this as? JsonValue.ObjectValue)?.value
-internal fun JsonValue.arrayOrNull() = (this as? JsonValue.ArrayValue)?.value
-internal fun JsonValue.stringOrNull() = (this as? JsonValue.StringValue)?.value
-internal fun JsonValue.numberOrNull() = (this as? JsonValue.NumberValue)?.value
+fun JsonValue.objectOrNull() = (this as? JsonValue.ObjectValue)?.value
+fun JsonValue.arrayOrNull() = (this as? JsonValue.ArrayValue)?.value
+fun JsonValue.stringOrNull() = (this as? JsonValue.StringValue)?.value
+fun JsonValue.numberOrNull() = (this as? JsonValue.NumberValue)?.value
+fun JsonValue.booleanOrNull() = (this as? JsonValue.BooleanValue)?.value

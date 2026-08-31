@@ -30,6 +30,7 @@ User Request
 - [المرحلة الثالثة: Local Media Engine](docs/stage-03-local-media-engine.md)
 - [المرحلة الرابعة: Local Speech + Transcript + Analysis](docs/stage-04-local-speech-transcript-analysis.md)
 - [المرحلة الخامسة: AI Provider System](docs/stage-05-ai-provider-system.md)
+- [المرحلة السادسة: AI Chat Editing Core](docs/stage-06-ai-chat-editing-core.md)
 - [تقرير تنفيذ المرحلتين 4 و5](docs/implementation-report-stages-04-05.md)
 - [تقرير تنفيذ المرحلتين 2 و3](docs/implementation-report-stages-02-03.md)
 - [إشعارات الأطراف الثالثة](THIRD_PARTY_NOTICES.md)
@@ -42,7 +43,8 @@ User Request
 - [x] المرحلة الثالثة: Local Media Engine + Media3 + FFmpeg fallback contracts.
 - [x] المرحلة الرابعة: Local Whisper + Transcript + Analysis foundation.
 - [x] المرحلة الخامسة: Unified AI Provider System foundation.
-- [ ] المرحلة السادسة وما بعدها: Chat Editing وEditPlan pipeline والواجهات.
+- [x] المرحلة السادسة: Chat Editing وContext وEditPlan validation/simulation/apply.
+- [ ] المرحلة السابعة وما بعدها: Editor UI وتجربة Timeline.
 
 ## الحقوق
 
