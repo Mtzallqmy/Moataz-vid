@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(moataz_whisper LANGUAGES C CXX)
+
+set(WHISPER_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../third_party/whisper.cpp")
+if(NOT EXISTS "${WHISPER_ROOT}/CMakeLists.txt")
+    message(FATAL_ERROR "whisper.cpp submodule missing; run git submodule update --init --recursive")
+endif()
+
+set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+add_subdirectory("${WHISPER_ROOT}" whisper-build)
+add_library(moataz_whisper SHARED whisper_jni.cpp)
+target_link_libraries(moataz_whisper PRIVATE whisper log android)
+target_compile_options(moataz_whisper PRIVATE -Wall -Wextra)

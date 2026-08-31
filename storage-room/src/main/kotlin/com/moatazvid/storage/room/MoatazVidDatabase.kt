@@ -12,8 +12,11 @@ import androidx.room3.RoomDatabase
         ProjectConstraintEntity::class, ProtectedRangeEntity::class,
         TranscriptEntity::class, AnalysisEntity::class, ProxyEntity::class,
         EditTransactionEntity::class, HistoryCursorEntity::class, ExportRecordEntity::class,
+        TranscriptSegmentEntity::class, TranscriptWordEntity::class,
+        TranscriptionJobEntity::class, TranscriptionCheckpointEntity::class,
+        SpeechModelPackEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class MoatazVidDatabase : RoomDatabase() {
@@ -23,10 +26,10 @@ abstract class MoatazVidDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
     abstract fun cacheDao(): CacheDao
     abstract fun exportDao(): ExportDao
+    abstract fun speechDao(): SpeechDao
 
     companion object {
         const val FILE_NAME = "moataz_vid.db"
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
     }
 }
-

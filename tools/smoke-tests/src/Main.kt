@@ -1,6 +1,7 @@
 import com.moatazvid.core.*
 import com.moatazvid.media.*
 import com.moatazvid.storage.*
+import com.moatazvid.speech.*
 import java.nio.file.Files
 
 private fun checkCondition(value: Boolean, message: String) {
@@ -74,6 +75,9 @@ fun main() {
     )
     checkCondition(licenseErrors.isNotEmpty(), "FFmpeg license guard")
 
+    checkCondition(ArabicTextNormalizer.normalize("أَلْبَطّارية ١٢") == "البطارية 12", "Arabic transcript normalization")
+    val silence = SilenceDetector().detect(SourceId("src"), FloatArray(16_000))
+    checkCondition(silence.single().sourceRange.duration.value == 1_000_000L, "offline silence detection")
+
     println("Moataz vid core smoke tests: PASS")
 }
-

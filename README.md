@@ -28,6 +28,7 @@ User Request
 - [المرحلة الأولى: Project / Timeline Data Model V1](docs/phase-01-project-timeline-data-model.md)
 - [المرحلة الثانية: Storage Architecture](docs/stage-02-storage-architecture.md)
 - [المرحلة الثالثة: Local Media Engine](docs/stage-03-local-media-engine.md)
+- [المرحلة الرابعة: Local Speech + Transcript + Analysis](docs/stage-04-local-speech-transcript-analysis.md)
 - [تقرير تنفيذ المرحلتين 2 و3](docs/implementation-report-stages-02-03.md)
 - [إشعارات الأطراف الثالثة](THIRD_PARTY_NOTICES.md)
 
@@ -37,6 +38,7 @@ User Request
 - [x] المرحلة الأولى: نموذج Project/Timeline والكيانات والتخزين والتاريخ.
 - [x] المرحلة الثانية: Storage Architecture + Room + Project Files foundation.
 - [x] المرحلة الثالثة: Local Media Engine + Media3 + FFmpeg fallback contracts.
+- [x] المرحلة الرابعة: Local Whisper + Transcript + Analysis foundation.
 - [ ] المراحل اللاحقة للذكاء الاصطناعي والواجهات.
 
 ## الحقوق
