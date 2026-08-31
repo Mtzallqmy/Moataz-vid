@@ -40,7 +40,7 @@ class StorageCoreTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test fun `autosave debounces and immediate flush persists latest`() = runTest {
         val values = mutableListOf<Int>()
-        val coordinator = AutosaveCoordinator(this, 100.milliseconds) { values += it }
+        val coordinator = AutosaveCoordinator<Int>(this, 100.milliseconds) { values += it }
         coordinator.schedule(1)
         coordinator.schedule(2)
         advanceTimeBy(101)
@@ -50,4 +50,3 @@ class StorageCoreTest {
         coordinator.close()
     }
 }
-
