@@ -171,7 +171,7 @@ class LocalWhisperProvider(
             }
             val finished = clock()
             val transcript = Transcript(transcriptId, request.sourceId, request.streamId, request.language, TranscriptStatus.READY, pack.id, request.sourceFingerprint, 1, now, finished)
-            val bundle = TranscriptBundle(transcript, TranscriptMetadata(transcriptId, id, pack.displayName, pack.version, TimestampQuality.NATIVE_WORD, null,
+            val bundle = TranscriptBundle(transcript, TranscriptMetadata(transcriptId, id, pack.displayName, pack.version, TimestampQuality.TOKEN_DERIVED, null,
                 request.audio.estimatedDuration ?: DurationUs(committedThrough.value)), allSegments, allWords)
             store.finalize(bundle)
             flow.emit(TranscriptionEvent.Completed(request.jobId, bundle))

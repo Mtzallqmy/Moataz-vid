@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(moataz_whisper LANGUAGES C CXX)
 
-set(WHISPER_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../third_party/whisper.cpp")
+set(WHISPER_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/whisper.cpp")
 if(NOT EXISTS "${WHISPER_ROOT}/CMakeLists.txt")
     message(FATAL_ERROR "whisper.cpp submodule missing; run git submodule update --init --recursive")
 endif()

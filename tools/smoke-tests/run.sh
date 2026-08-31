@@ -10,6 +10,7 @@ find "$ROOT/core-model/src/main/kotlin" \
      "$ROOT/storage-core/src/main/kotlin" \
      "$ROOT/media-engine/src/main/kotlin" \
      "$ROOT/speech-core/src/main/kotlin" \
+     "$ROOT/ai-provider-core/src/main/kotlin" \
      "$ROOT/tools/smoke-tests/src" \
      -name '*.kt' -print > "${OUT}.sources"
 

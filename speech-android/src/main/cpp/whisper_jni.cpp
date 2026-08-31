@@ -16,7 +16,7 @@ Java_com_moatazvid_speech_android_WhisperCppBridge_nativeLoadModel(JNIEnv *env, 
 }
 
 extern "C" JNIEXPORT jobjectArray JNICALL
-Java_com_moatazvid_speech_android_WhisperCppBridge_nativeTranscribe(JNIEnv *env, jobject, jlong handle, jfloatArray input, jstring language, jboolean) {
+Java_com_moatazvid_speech_android_WhisperCppBridge_nativeTranscribe(JNIEnv *env, jobject, jlong handle, jfloatArray input, jstring language, jboolean word_timestamps) {
     auto *ctx = reinterpret_cast<whisper_context *>(handle);
     if (!ctx) { last_error = "Invalid model handle"; return nullptr; }
     const jsize count = env->GetArrayLength(input);
@@ -25,18 +25,32 @@ Java_com_moatazvid_speech_android_WhisperCppBridge_nativeTranscribe(JNIEnv *env,
     const char *lang = env->GetStringUTFChars(language, nullptr);
     whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
     params.language = std::string(lang) == "auto" ? nullptr : lang;
+    params.token_timestamps = word_timestamps;
     params.print_progress = false; params.print_realtime = false; params.print_timestamps = false;
     const int result = whisper_full(ctx, params, samples.data(), samples.size());
     env->ReleaseStringUTFChars(language, lang);
     if (result != 0) { last_error = "whisper_full failed"; return nullptr; }
-    const int n = whisper_full_n_segments(ctx);
+    std::vector<std::string> output;
+    const int segments = whisper_full_n_segments(ctx);
+    for (int i = 0; i < segments; ++i) {
+        if (word_timestamps) {
+            const int tokens = whisper_full_n_tokens(ctx, i);
+            for (int j = 0; j < tokens; ++j) {
+                const whisper_token_data token = whisper_full_get_token_data(ctx, i, j);
+                if (token.id >= whisper_token_eot(ctx) || token.t0 < 0 || token.t1 <= token.t0) continue;
+                const char *text = whisper_full_get_token_text(ctx, i, j);
+                if (!text || !*text) continue;
+                output.emplace_back(std::to_string(token.t0 * 10000) + "\x1f" + std::to_string(token.t1 * 10000) + "\x1f" + text);
+            }
+        } else {
+            output.emplace_back(std::to_string(whisper_full_get_segment_t0(ctx, i) * 10000) + "\x1f" +
+                                std::to_string(whisper_full_get_segment_t1(ctx, i) * 10000) + "\x1f" + whisper_full_get_segment_text(ctx, i));
+        }
+    }
     jclass string_class = env->FindClass("java/lang/String");
-    jobjectArray rows = env->NewObjectArray(n, string_class, nullptr);
-    for (int i = 0; i < n; ++i) {
-        const int64_t start_us = whisper_full_get_segment_t0(ctx, i) * 10000;
-        const int64_t end_us = whisper_full_get_segment_t1(ctx, i) * 10000;
-        std::string row = std::to_string(start_us) + "\x1f" + std::to_string(end_us) + "\x1f" + whisper_full_get_segment_text(ctx, i);
-        env->SetObjectArrayElement(rows, i, env->NewStringUTF(row.c_str()));
+    jobjectArray rows = env->NewObjectArray(output.size(), string_class, nullptr);
+    for (size_t i = 0; i < output.size(); ++i) {
+        env->SetObjectArrayElement(rows, i, env->NewStringUTF(output[i].c_str()));
     }
     return rows;
 }

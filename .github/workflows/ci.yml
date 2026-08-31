@@ -12,9 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :core-model:test :storage-core:test :media-engine:test :speech-core:test
+      - run: ./gradlew :core-model:test :storage-core:test :media-engine:test :speech-core:test :ai-provider-core:test

@@ -2,6 +2,7 @@ import com.moatazvid.core.*
 import com.moatazvid.media.*
 import com.moatazvid.storage.*
 import com.moatazvid.speech.*
+import com.moatazvid.ai.provider.*
 import java.nio.file.Files
 
 private fun checkCondition(value: Boolean, message: String) {
@@ -78,6 +79,9 @@ fun main() {
     checkCondition(ArabicTextNormalizer.normalize("أَلْبَطّارية ١٢") == "البطارية 12", "Arabic transcript normalization")
     val silence = SilenceDetector().detect(SourceId("src"), FloatArray(16_000))
     checkCondition(silence.single().sourceRange.duration.value == 1_000_000L, "offline silence detection")
+    checkCondition(BaseUrlNormalizer.normalize("https://example.test/v1/") == "https://example.test/v1", "provider base URL")
+    checkCondition(BaseUrlNormalizer.resolve("https://example.test/v1", "/v1/chat/completions") == "https://example.test/v1/chat/completions", "no duplicate v1")
+    checkCondition(RedactingNetworkLogger(true).requestSummary(HttpRequest(RequestId("r"), "POST", "https://example.test", mapOf("Authorization" to "Bearer secret"), "private", 1_000, true)).contains("<redacted>"), "secret redaction")
 
     println("Moataz vid core smoke tests: PASS")
 }
