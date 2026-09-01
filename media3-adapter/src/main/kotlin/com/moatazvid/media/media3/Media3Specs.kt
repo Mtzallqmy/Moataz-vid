@@ -114,7 +114,7 @@ class Media3CompositionMapper(private val resolver: Media3InputResolver) {
             }
         }
         val transitions = graph.transitions.map {
-            Media3TransitionSpec(it.id, it.fromClipId, it.toClipId, it.type, it.duration.value)
+            Media3TransitionSpec(it.id, it.outgoingClipId, it.incomingClipId, it.type, it.duration.value)
         }
         return Media3CompositionSpec(
             sequences = video + audio,
