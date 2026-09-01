@@ -46,7 +46,8 @@ class AndroidAtomicOutputTargetFactory(
         if (maxAgeMs <= 0) return 0
         var deleted = 0
         tempDirectory.listFiles().orEmpty().forEach { file ->
-            if (file.toURI().toString() !in activeTemporaryUris && nowMs - file.lastModified() >= maxAgeMs && file.delete()) deleted++
+            val active = file.absolutePath in activeTemporaryUris || file.toURI().toString() in activeTemporaryUris
+            if (!active && nowMs - file.lastModified() >= maxAgeMs && file.delete()) deleted++
         }
         return deleted
     }
