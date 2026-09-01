@@ -10,6 +10,10 @@ class MoatazVidApplication : Application() {
         ProductionProjectRepository.create(this)
     }
 
+    val aiProviders: ProductionAiProviderRuntime by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        ProductionAiProviderRuntime(this, projects.database)
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
