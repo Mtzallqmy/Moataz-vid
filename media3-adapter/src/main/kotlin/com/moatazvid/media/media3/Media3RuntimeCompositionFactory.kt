@@ -15,6 +15,7 @@ import android.text.style.StyleSpan
 import androidx.media3.common.C
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.AlphaScale
@@ -73,8 +74,7 @@ class Media3RuntimeCompositionFactory(
         val compositionVideoEffects = buildList<Effect> {
             add(Presentation.createForWidthAndHeight(spec.canvas.width, spec.canvas.height, Presentation.LAYOUT_SCALE_TO_FIT))
             spec.overlays.sortedBy { it.startUs }.forEach { overlay ->
-                val timed = buildTimedOverlay(overlay)
-                if (timed != null) add(timed)
+                buildTimedOverlay(overlay)?.let(::add)
             }
         }
         val builder = Composition.Builder(sequences)
@@ -85,9 +85,7 @@ class Media3RuntimeCompositionFactory(
                     Media3HdrMode.FORCE_SDR -> Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL
                 }
             )
-        if (compositionVideoEffects.isNotEmpty()) {
-            builder.setEffects(Effects(emptyList(), compositionVideoEffects))
-        }
+        if (compositionVideoEffects.isNotEmpty()) builder.setEffects(Effects(emptyList(), compositionVideoEffects))
         return builder.build()
     }
 
@@ -117,14 +115,29 @@ class Media3RuntimeCompositionFactory(
             .setUri(Uri.parse(spec.resolverToken))
             .setClippingConfiguration(clipping)
             .build()
+        val audioProcessors = buildItemAudioProcessors(spec)
         val videoEffects = buildItemVideoEffects(spec)
         val builder = EditedMediaItem.Builder(mediaItem)
             .setDurationUs(spec.sourceDurationUs)
             .setRemoveAudio(spec.removeAudio)
             .setRemoveVideo(spec.removeVideo)
-        if (videoEffects.isNotEmpty()) builder.setEffects(Effects(emptyList(), videoEffects))
+        if (audioProcessors.isNotEmpty() || videoEffects.isNotEmpty()) builder.setEffects(Effects(audioProcessors, videoEffects))
         if (spec.speed != 1.0) builder.setSpeed(ConstantSpeedProvider(spec.speed.toFloat()))
         return builder.build()
+    }
+
+    private fun buildItemAudioProcessors(spec: Media3EditedItemSpec): List<AudioProcessor> {
+        if (spec.removeAudio) return emptyList()
+        val hasProcessing = spec.gainDb != 0f || spec.fadeInUs > 0 || spec.fadeOutUs > 0 || spec.gainAutomation.isNotEmpty()
+        return if (!hasProcessing) emptyList() else listOf(
+            MoatazGainAudioProcessor(
+                baseGainDb = spec.gainDb,
+                automation = spec.gainAutomation,
+                itemDurationUs = spec.timelineDurationUs,
+                fadeInUs = spec.fadeInUs,
+                fadeOutUs = spec.fadeOutUs,
+            )
+        )
     }
 
     private fun buildItemVideoEffects(spec: Media3EditedItemSpec): List<Effect> = buildList {
@@ -150,12 +163,7 @@ class Media3RuntimeCompositionFactory(
             add(Crop(left, right, bottom, top))
         }
         if (transform.scaleX != 1f || transform.scaleY != 1f || transform.rotationDegrees != 0f) {
-            add(
-                ScaleAndRotateTransformation.Builder()
-                    .setScale(transform.scaleX, transform.scaleY)
-                    .setRotationDegrees(transform.rotationDegrees)
-                    .build()
-            )
+            add(ScaleAndRotateTransformation.Builder().setScale(transform.scaleX, transform.scaleY).setRotationDegrees(transform.rotationDegrees).build())
         }
         require(transform.positionX == 0.5f && transform.positionY == 0.5f) {
             "Video translation is not bound in the Media3 V1 renderer"
@@ -244,10 +252,7 @@ class Media3RuntimeCompositionFactory(
     private fun overlaySettings(transform: TransformNode, opacity: Float): StaticOverlaySettings =
         StaticOverlaySettings.Builder()
             .setAlphaScale(opacity.coerceAtLeast(0f))
-            .setBackgroundFrameAnchor(
-                (transform.positionX * 2f - 1f).coerceIn(-1f, 1f),
-                (1f - transform.positionY * 2f).coerceIn(-1f, 1f),
-            )
+            .setBackgroundFrameAnchor((transform.positionX * 2f - 1f).coerceIn(-1f, 1f), (1f - transform.positionY * 2f).coerceIn(-1f, 1f))
             .setOverlayFrameAnchor(0f, 0f)
             .setScale(transform.scaleX, transform.scaleY)
             .setRotationDegrees(transform.rotationDegrees)
