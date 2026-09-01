@@ -34,6 +34,8 @@ fun ProductionEditorScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val application = context.applicationContext as MoatazVidApplication
+    val aiRuntime = remember { application.aiProviders }
     val uiScope = rememberCoroutineScope()
     val surfaceView = remember(projectId.value) { SurfaceView(context).apply { keepScreenOn = true } }
     val runtimeScope = remember(projectId.value) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
@@ -42,13 +44,13 @@ fun ProductionEditorScreen(
     val player = remember(projectId.value) { ProductionEditorPlayer(context, repository, surfaceView, runtimeScope) }
     val persistence = remember(projectId.value) { SharedPreferencesEditorStatePersistence(context) }
     val aiData = remember(projectId.value) { ProductionAiDataSource(repository) }
-    val ai = remember(projectId.value) {
+    val ai = remember(projectId.value, aiRuntime) {
         AiEditorEngine(
             data = aiData,
             store = store,
             contextBuilder = AiContextBuilder(aiData),
-            modelResolver = UnconfiguredEditingModelResolver,
-            proposalClient = UnconfiguredEditPlanClient,
+            modelResolver = aiRuntime.modelResolver,
+            proposalClient = aiRuntime.proposalClient,
         )
     }
     val manual = remember(projectId.value) { ManualEditService(store) }
