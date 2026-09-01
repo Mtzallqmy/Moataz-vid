@@ -23,14 +23,16 @@ data class Rational(val numerator: Int, val denominator: Int) {
     fun asDouble(): Double = numerator.toDouble() / denominator
 
     companion object {
+        val FPS_23_976 = Rational(24_000, 1_001)
         val FPS_24 = Rational(24, 1)
         val FPS_25 = Rational(25, 1)
-        val FPS_30 = Rational(30, 1)
         val FPS_29_97 = Rational(30_000, 1_001)
+        val FPS_30 = Rational(30, 1)
+        val FPS_50 = Rational(50, 1)
+        val FPS_59_94 = Rational(60_000, 1_001)
         val FPS_60 = Rational(60, 1)
     }
 }
 
 fun millisecondsToUs(milliseconds: Long): TimeUs = TimeUs(Math.multiplyExact(milliseconds, 1_000L))
 fun secondsToUs(seconds: Double): TimeUs = TimeUs((seconds * 1_000_000.0).roundToLong())
-
