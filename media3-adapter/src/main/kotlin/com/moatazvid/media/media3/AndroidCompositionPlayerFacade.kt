@@ -47,8 +47,9 @@ class AndroidCompositionPlayerFacade(
         player.seekTo(position.value / 1_000L)
     }
 
-    override suspend fun release(sessionId: String) = withContext(Dispatchers.Main.immediate) {
+    override suspend fun release(sessionId: String): Unit = withContext(Dispatchers.Main.immediate) {
         sessions.remove(sessionId)?.release()
+        Unit
     }
 
     private fun attachSurface(player: CompositionPlayer, token: Any) {
