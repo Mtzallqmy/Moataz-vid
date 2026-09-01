@@ -1,6 +1,7 @@
 package com.moatazvid.ai.editor
 
 import com.moatazvid.core.*
+import com.moatazvid.media.*
 import com.moatazvid.storage.ProjectSnapshot
 import kotlin.math.roundToLong
 
@@ -50,13 +51,14 @@ class EditSimulationEngine(private val validator: EditPlanValidator = EditPlanVa
                 val afterIds = state.snapshot.items.map { it.id }.toSet()
                 addedItems += (afterIds - beforeIds).size; removedItems += (beforeIds - afterIds).size
                 if (operation is EditOperation.AddCaptions) addedCaptions += operation.drafts.size
+                if (operation is EditOperation.RegenerateCaptions) addedCaptions += operation.drafts.size
             }
             val conflicts = findConflicts(state)
             val diff = EditDiff(project.duration, state.duration, plan.operations.size, removed, moved, addedCaptions, addedItems, removedItems,
                 summarize(project.duration, state.duration, removed, moved, addedCaptions, plan.operations.size))
             val complexity = when {
-                plan.operations.any { it is EditOperation.AddZoom || it is EditOperation.ApplyColorAdjustment } || plan.operations.size > 30 -> RenderComplexity.HIGH
-                plan.operations.size > 10 -> RenderComplexity.MEDIUM
+                plan.operations.any { it is EditOperation.AddZoom || it is EditOperation.ApplyColorAdjustment || it is EditOperation.AddEffect || it is EditOperation.AddTransition || it is EditOperation.AddImageOverlay } || plan.operations.size > 30 -> RenderComplexity.HIGH
+                plan.operations.any { it is EditOperation.SetDucking } || plan.operations.size > 10 -> RenderComplexity.MEDIUM
                 else -> RenderComplexity.LOW
             }
             SimulationResult(conflicts.isEmpty(), state, diff, conflicts, emptyList(), captionWarnings(state), audioWarnings(state), emptyList(), complexity)
@@ -89,6 +91,10 @@ object TimelineOperationApplier {
         var properties = project.clipProperties.toMutableMap()
         var constraints = project.constraints.toMutableList()
         var captions = project.captions.toMutableList()
+        var creativeElements = project.creativeElements.toMutableList()
+        var creativeEffects = project.creativeEffects.mapValues { it.value.toMutableList() }.toMutableMap()
+        var creativeTransitions = project.creativeTransitions.toMutableList()
+        var ducking = project.ducking.toMutableMap()
         var sequence = project.snapshot.sequence
         fun find(id: ClipId) = items.first { it.id == id }
         fun replace(item: TimelineItem) { items[items.indexOfFirst { it.id == item.id }] = item }
@@ -124,7 +130,7 @@ object TimelineOperationApplier {
                 }
                 ripple(removeTimelineStart + removedTimeline, -removedTimeline, setOfNotNull(operation.leftClipId, operation.rightClipId))
             }
-            is EditOperation.RemoveClip -> { val clip = find(operation.clipId); items.remove(clip); properties.remove(clip.id); ripple(clip.timelineStart.value + clip.timelineDuration.value, -clip.timelineDuration.value) }
+            is EditOperation.RemoveClip -> { val clip = find(operation.clipId); items.remove(clip); properties.remove(clip.id); creativeEffects.remove(clip.id); ripple(clip.timelineStart.value + clip.timelineDuration.value, -clip.timelineDuration.value) }
             is EditOperation.MoveClip -> {
                 val clip = find(operation.clipId); items.remove(clip)
                 val target = items.filter { it.trackId == operation.targetTrackId }.sortedBy { it.timelineStart.value }.toMutableList()
@@ -139,21 +145,64 @@ object TimelineOperationApplier {
             is EditOperation.SetCrop -> properties[operation.clipId] = (properties[operation.clipId] ?: ClipEditProperties()).copy(cropAspectRatio = operation.aspectRatio)
             is EditOperation.SetTransform -> properties[operation.clipId] = (properties[operation.clipId] ?: ClipEditProperties()).copy(transform = operation.transform)
             is EditOperation.AddZoom -> properties[operation.clipId] = (properties[operation.clipId] ?: ClipEditProperties()).copy(effects = (properties[operation.clipId]?.effects.orEmpty() + "zoom:${operation.timelineRange.start.value}:${operation.timelineRange.endExclusive.value}:${operation.scaleFrom}:${operation.scaleTo}"))
-            is EditOperation.AddText -> items += TimelineItem(operation.id, project.snapshot.project.id, sequence.id, operation.trackId, TimelineItemType.TEXT, operation.timelineRange.start, operation.timelineRange.duration, null, null)
-            is EditOperation.AddCaptions -> captions += operation.drafts
+            is EditOperation.AddText -> {
+                items += TimelineItem(operation.id, project.snapshot.project.id, sequence.id, operation.trackId, TimelineItemType.TEXT, operation.timelineRange.start, operation.timelineRange.duration, null, null)
+                creativeElements += TextElement(CreativeElementId(operation.id.value), operation.trackId, operation.timelineRange, operation.text, operation.styleId)
+            }
+            is EditOperation.UpdateText -> creativeElements = creativeElements.map { if (it.id.value == operation.id.value && it is TextElement) it.copy(text = operation.text) else it }.toMutableList()
+            is EditOperation.RemoveOverlay -> { items.removeAll { it.id == operation.id }; creativeElements.removeAll { it.id.value == operation.id.value } }
+            is EditOperation.AddImageOverlay -> {
+                items += TimelineItem(operation.id, project.snapshot.project.id, sequence.id, operation.trackId, TimelineItemType.IMAGE, operation.timelineRange.start, operation.timelineRange.duration, null, null)
+                creativeElements += ImageOverlayElement(CreativeElementId(operation.id.value), operation.trackId, operation.timelineRange, operation.assetId, transform = operation.transform.copy(opacity = operation.opacity), zIndex = operation.zIndex)
+            }
+            is EditOperation.SetOverlayTransform -> creativeElements = creativeElements.map { element ->
+                if (element.id.value != operation.id.value) element else when (element) {
+                    is TextElement -> element.copy(transform = operation.transform)
+                    is ImageOverlayElement -> element.copy(transform = operation.transform)
+                    is ShapeElement -> element.copy(transform = operation.transform)
+                    is CaptionCreativeElement -> element.copy(transform = operation.transform)
+                    is VideoOverlayElement -> element.copy(transform = operation.transform)
+                }
+            }.toMutableList()
+            is EditOperation.AddCaptions -> {
+                captions += operation.drafts
+                creativeElements += operation.drafts.map { CaptionCreativeElement(CreativeElementId(it.id), operation.trackId, it.sourceRange, it.text, operation.styleId, it.wordIds.map { id -> id.value }) }
+            }
+            is EditOperation.RegenerateCaptions -> {
+                captions.removeAll { existing -> existing.sourceId in operation.drafts.map { it.sourceId }.toSet() }
+                creativeElements.removeAll { it is CaptionCreativeElement && it.trackId == operation.trackId }
+                captions += operation.drafts
+                creativeElements += operation.drafts.map { CaptionCreativeElement(CreativeElementId(it.id), operation.trackId, it.sourceRange, it.text, operation.styleId, it.wordIds.map { id -> id.value }) }
+            }
             is EditOperation.UpdateCaptionStyle -> Unit
             is EditOperation.AddAudio -> items += TimelineItem(operation.id, project.snapshot.project.id, sequence.id, operation.trackId, TimelineItemType.MUSIC, operation.timelineStart, operation.duration, null, null).also { properties[it.id] = ClipEditProperties(gainDb = volumeToDb(operation.volume)) }
             is EditOperation.RemoveAudio -> { items.remove(find(operation.clipId)); properties.remove(operation.clipId) }
             is EditOperation.SetAudioGain -> properties[operation.clipId] = (properties[operation.clipId] ?: ClipEditProperties()).copy(gainDb = operation.gainDb)
+            is EditOperation.SetDucking -> ducking[operation.trackId] = operation.settings
             is EditOperation.AddFade -> properties[operation.clipId] = (properties[operation.clipId] ?: ClipEditProperties()).let { it.copy(fades = it.fades + (operation.fadeType to operation.duration)) }
             is EditOperation.ApplyColorAdjustment -> properties[operation.clipId] = (properties[operation.clipId] ?: ClipEditProperties()).let { it.copy(effects = it.effects + "color:${operation.brightness}:${operation.contrast}:${operation.saturation}") }
+            is EditOperation.AddEffect -> {
+                val descriptor = DefaultCreativeDescriptors.effects[operation.effectType]
+                val params = operation.parameters.map { (name, value) ->
+                    val range = descriptor?.parameterRanges?.get(name)
+                    EffectParameter(name, value, range?.start ?: value, range?.endInclusive ?: value)
+                }
+                val list = creativeEffects.getOrPut(operation.clipId) { mutableListOf() }
+                list += EffectInstance(operation.effectId, operation.effectType, params, operation.range, orderIndex = list.size)
+            }
+            is EditOperation.UpdateEffect -> creativeEffects[operation.clipId] = creativeEffects[operation.clipId].orEmpty().map { effect ->
+                if (effect.id != operation.effectId) effect else effect.copy(parameters = effect.parameters.map { parameter -> operation.parameters[parameter.name]?.let { parameter.copy(value = it) } ?: parameter })
+            }.toMutableList()
+            is EditOperation.RemoveEffect -> creativeEffects[operation.clipId]?.removeAll { it.id == operation.effectId }
+            is EditOperation.AddTransition -> creativeTransitions += operation.transition
+            is EditOperation.RemoveTransition -> creativeTransitions.removeAll { it.id == operation.transitionId }
             is EditOperation.SetProjectAspectRatio -> sequence = sequence.copy(canvasWidth = operation.width, canvasHeight = operation.height)
             is EditOperation.SetDurationTarget -> Unit
             is EditOperation.AddConstraint -> constraints += operation.constraint
             is EditOperation.RemoveConstraint -> constraints.removeAll { it.id == operation.constraintId }
         }
         val snapshot = ProjectSnapshot(project.snapshot.project, sequence, project.snapshot.tracks, items.sortedBy { it.timelineStart.value }, project.snapshot.constraintsRevision)
-        return project.copy(snapshot = snapshot, clipProperties = properties, constraints = constraints, captions = captions)
+        return project.copy(snapshot = snapshot, clipProperties = properties, constraints = constraints, captions = captions, creativeElements = creativeElements, creativeEffects = creativeEffects, creativeTransitions = creativeTransitions, ducking = ducking)
     }
     private fun volumeToDb(volume: Float): Float = if (volume <= 0f) -60f else (20 * kotlin.math.log10(volume.toDouble())).toFloat().coerceIn(-60f, 24f)
 }
