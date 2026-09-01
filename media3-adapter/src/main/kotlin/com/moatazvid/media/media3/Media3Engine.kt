@@ -75,7 +75,11 @@ class Media3Engine(
     }
 
     companion object {
-        /** Conservative defaults. Creative overlay/effect/transition features must be opted in by a concrete renderer binding. */
+        /**
+         * Verified against the concrete Composition factory in this module. Deliberately excluded:
+         * TRANSLATE, VARIABLE_SPEED and CROSSFADE. Those remain capability-gated instead of being
+         * exposed as UI promises without a stable preview/export implementation.
+         */
         val DEFAULT_BOUND_FEATURES: Set<RenderFeature> = setOf(
             RenderFeature.TRIM,
             RenderFeature.CONCATENATE,
@@ -84,6 +88,12 @@ class Media3Engine(
             RenderFeature.ROTATE,
             RenderFeature.CONSTANT_SPEED,
             RenderFeature.AUDIO_MIX,
+            RenderFeature.AUDIO_FADE,
+            RenderFeature.AUDIO_GAIN_AUTOMATION,
+            RenderFeature.TEXT_OVERLAY,
+            RenderFeature.IMAGE_OVERLAY,
+            RenderFeature.CAPTION_BURN_IN,
+            RenderFeature.CUSTOM_EFFECT,
             RenderFeature.KEEP_HDR,
             RenderFeature.TONE_MAP_HDR,
             RenderFeature.PROXY,
