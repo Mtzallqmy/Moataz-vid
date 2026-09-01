@@ -20,7 +20,7 @@ jobs:
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
       - name: Run core tests
-        run: ./gradlew :core-model:test :storage-core:test :media-engine:test :speech-core:test :ai-provider-core:test :ai-editor-core:test :editor-core:test
+        run: ./gradlew -PincludeAndroidModules=false :core-model:test :storage-core:test :media-engine:test :speech-core:test :ai-provider-core:test :ai-editor-core:test :editor-core:test
       - name: Summarize unit tests
         if: always()
         run: |
