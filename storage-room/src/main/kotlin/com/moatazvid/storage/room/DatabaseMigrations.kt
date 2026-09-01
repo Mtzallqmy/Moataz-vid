@@ -28,5 +28,39 @@ object DatabaseMigrations {
         db.execSQL("CREATE TABLE IF NOT EXISTS ai_provider_preferences (`key` TEXT NOT NULL PRIMARY KEY, value TEXT)")
     }
 
-    val ALL = arrayOf(FROM_1_TO_2, FROM_2_TO_3)
+    /**
+     * Stage 8 corrected the transition foreign-key declaration, but the database version was
+     * accidentally left at v3. Existing v3 installs therefore fail Room schema validation on
+     * startup even though the transition columns themselves are unchanged. Rebuild only this
+     * table and preserve every row while moving the schema identity to v4.
+     */
+    val FROM_3_TO_4 = Migration(3, 4) { db ->
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS transitions_v4 (" +
+                "transitionId TEXT NOT NULL PRIMARY KEY, " +
+                "trackId TEXT NOT NULL, " +
+                "outgoingClipId TEXT NOT NULL, " +
+                "incomingClipId TEXT NOT NULL, " +
+                "type TEXT NOT NULL, " +
+                "durationUs INTEGER NOT NULL, " +
+                "alignment TEXT NOT NULL, " +
+                "parametersJson TEXT NOT NULL, " +
+                "FOREIGN KEY(trackId) REFERENCES tracks(trackId) ON DELETE CASCADE, " +
+                "FOREIGN KEY(outgoingClipId) REFERENCES clips(clipId) ON DELETE CASCADE, " +
+                "FOREIGN KEY(incomingClipId) REFERENCES clips(clipId) ON DELETE CASCADE)"
+        )
+        db.execSQL(
+            "INSERT OR REPLACE INTO transitions_v4 " +
+                "(transitionId, trackId, outgoingClipId, incomingClipId, type, durationUs, alignment, parametersJson) " +
+                "SELECT transitionId, trackId, outgoingClipId, incomingClipId, type, durationUs, alignment, parametersJson FROM transitions"
+        )
+        db.execSQL("DROP TABLE transitions")
+        db.execSQL("ALTER TABLE transitions_v4 RENAME TO transitions")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_transitions_trackId ON transitions(trackId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_transitions_outgoingClipId ON transitions(outgoingClipId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_transitions_incomingClipId ON transitions(incomingClipId)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_transitions_outgoingClipId_incomingClipId ON transitions(outgoingClipId, incomingClipId)")
+    }
+
+    val ALL = arrayOf(FROM_1_TO_2, FROM_2_TO_3, FROM_3_TO_4)
 }
