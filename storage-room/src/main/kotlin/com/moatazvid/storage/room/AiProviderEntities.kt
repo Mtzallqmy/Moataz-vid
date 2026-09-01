@@ -43,4 +43,5 @@ interface AiProviderDao {
     @Query("SELECT * FROM ai_model_assignments") suspend fun assignments(): List<AiModelAssignmentEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun assign(assignment: AiModelAssignmentEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun preference(preference: AiProviderPreferenceEntity)
+    @Query("SELECT value FROM ai_provider_preferences WHERE `key` = :key LIMIT 1") suspend fun preferenceValue(key: String): String?
 }
