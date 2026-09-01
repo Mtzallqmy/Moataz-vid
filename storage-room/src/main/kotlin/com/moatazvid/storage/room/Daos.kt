@@ -50,7 +50,9 @@ interface TransactionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun setCursor(cursor: HistoryCursorEntity)
     @Query("SELECT * FROM history_cursors WHERE sequenceId = :sequenceId") suspend fun cursor(sequenceId: String): HistoryCursorEntity?
     @Query("SELECT * FROM edit_transactions WHERE transactionId = :id") suspend fun get(id: String): EditTransactionEntity?
-    @Query("SELECT * FROM edit_transactions WHERE parentTransactionId = :parent AND branchId = :branch ORDER BY resultRevision LIMIT 1")
+    @Query("SELECT * FROM edit_transactions WHERE sequenceId = :sequenceId ORDER BY resultRevision") suspend fun history(sequenceId: String): List<EditTransactionEntity>
+    @Query("SELECT * FROM edit_transactions WHERE sequenceId = :sequenceId AND resultRevision = :resultRevision LIMIT 1") suspend fun byRevision(sequenceId: String, resultRevision: Long): EditTransactionEntity?
+    @Query("SELECT * FROM edit_transactions WHERE ((:parent IS NULL AND parentTransactionId IS NULL) OR parentTransactionId = :parent) AND branchId = :branch ORDER BY resultRevision LIMIT 1")
     suspend fun child(parent: String?, branch: String): EditTransactionEntity?
 }
 
