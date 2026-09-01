@@ -1,7 +1,5 @@
 package com.moatazvid.speech
 
-import com.moatazvid.core.TranscriptWordId
-
 /**
  * Pure cue editor. It edits generated caption cues only and never writes back to Raw Transcript.
  * The caller persists the returned list through the normal project transaction/undo path.
