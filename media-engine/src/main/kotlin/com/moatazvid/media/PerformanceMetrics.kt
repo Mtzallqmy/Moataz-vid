@@ -36,7 +36,7 @@ class PerformanceMetricsCollector(private val enabled: Boolean) {
         target.maximum.accumulateAndGet(value, ::maxOf)
     }
 
-    inline fun <T> measure(metric: PerformanceMetric, nanoTime: () -> Long = System::nanoTime, block: () -> T): T {
+    fun <T> measure(metric: PerformanceMetric, nanoTime: () -> Long = System::nanoTime, block: () -> T): T {
         if (!enabled) return block()
         val started = nanoTime()
         return try { block() } finally { record(metric, (nanoTime() - started) / 1_000_000) }
