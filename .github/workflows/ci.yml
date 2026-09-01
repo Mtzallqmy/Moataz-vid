@@ -19,7 +19,25 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :core-model:test :storage-core:test :media-engine:test :speech-core:test :ai-provider-core:test :ai-editor-core:test :editor-core:test
+      - name: Run core tests
+        run: ./gradlew :core-model:test :storage-core:test :media-engine:test :speech-core:test :ai-provider-core:test :ai-editor-core:test :editor-core:test
+      - name: Summarize unit tests
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          totals = dict(tests=0, failures=0, errors=0, skipped=0)
+          files = glob.glob('**/build/test-results/test/*.xml', recursive=True)
+          for path in files:
+              root = ET.parse(path).getroot()
+              for key in totals:
+                  totals[key] += int(float(root.attrib.get(key, 0)))
+          passed = totals['tests'] - totals['failures'] - totals['errors'] - totals['skipped']
+          line = f"Unit tests: total={totals['tests']} passed={passed} failed={totals['failures'] + totals['errors']} skipped={totals['skipped']}"
+          print(line)
+          with open('/tmp/unit-test-summary.txt', 'w') as f: f.write(line + '\n')
+          with open(__import__('os').environ['GITHUB_STEP_SUMMARY'], 'a') as f: f.write('### ' + line + '\n')
+          PY
 
   android-editor-build:
     runs-on: ubuntu-latest
@@ -34,4 +52,5 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew -PincludeAndroidModules=true :editor-ui:assembleDebug :editor-ui:compileDebugAndroidTestKotlin
+      - name: Compile Android editor and instrumentation sources
+        run: ./gradlew -PincludeAndroidModules=true :editor-ui:assembleDebug :editor-ui:compileDebugAndroidTestKotlin
