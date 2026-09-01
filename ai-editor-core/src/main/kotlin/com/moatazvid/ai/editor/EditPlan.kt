@@ -1,7 +1,7 @@
 package com.moatazvid.ai.editor
 
 import com.moatazvid.core.*
-import com.moatazvid.media.TransformNode
+import com.moatazvid.media.*
 import com.moatazvid.speech.CaptionDraft
 
 @JvmInline value class PendingEditId(val value: String)
@@ -9,7 +9,7 @@ import com.moatazvid.speech.CaptionDraft
 @JvmInline value class AiMessageId(val value: String)
 
 data class EditPlan(
-    val schemaVersion: String = "1.1",
+    val schemaVersion: String = "1.2",
     val id: EditPlanId,
     val previousPlanId: EditPlanId? = null,
     val projectId: ProjectId,
@@ -24,7 +24,7 @@ data class EditPlan(
     val confidence: Double? = null,
     val requiresUserApproval: Boolean = true,
 ) {
-    init { require(schemaVersion in setOf("1.0", "1.1")); require(baseProjectRevision >= 0); require(title.isNotBlank()); confidence?.let { require(it in 0.0..1.0) } }
+    init { require(schemaVersion in setOf("1.0", "1.1", "1.2")); require(baseProjectRevision >= 0); require(title.isNotBlank()); confidence?.let { require(it in 0.0..1.0) } }
 }
 
 data class EstimatedEditResult(val currentDuration: DurationUs, val estimatedDuration: DurationUs)
@@ -43,13 +43,24 @@ sealed interface EditOperation {
     data class SetTransform(val clipId: ClipId, val transform: TransformNode) : EditOperation { override val type = "SET_TRANSFORM" }
     data class AddZoom(val clipId: ClipId, val timelineRange: TimeRangeUs, val scaleFrom: Float, val scaleTo: Float) : EditOperation { override val type = "ADD_ZOOM" }
     data class AddText(val id: ClipId, val trackId: TrackId, val timelineRange: TimeRangeUs, val text: String, val styleId: String) : EditOperation { override val type = "ADD_TEXT" }
+    data class UpdateText(val id: ClipId, val text: String) : EditOperation { override val type = "UPDATE_TEXT" }
+    data class RemoveOverlay(val id: ClipId) : EditOperation { override val type = "REMOVE_OVERLAY" }
+    data class AddImageOverlay(val id: ClipId, val assetId: AssetId, val trackId: TrackId, val timelineRange: TimeRangeUs, val transform: CreativeTransform = CreativeTransform(), val opacity: Float = 1f, val zIndex: Int = 60) : EditOperation { override val type = "ADD_IMAGE_OVERLAY" }
+    data class SetOverlayTransform(val id: ClipId, val transform: CreativeTransform) : EditOperation { override val type = "SET_OVERLAY_TRANSFORM" }
     data class AddCaptions(val trackId: TrackId, val transcriptId: String, val styleId: String, val drafts: List<CaptionDraft>) : EditOperation { override val type = "ADD_CAPTIONS" }
+    data class RegenerateCaptions(val trackId: TrackId, val transcriptId: String, val styleId: String, val drafts: List<CaptionDraft>) : EditOperation { override val type = "REGENERATE_CAPTIONS" }
     data class UpdateCaptionStyle(val styleId: String, val wordsPerChunk: Int, val position: CaptionPosition, val fontScale: Float) : EditOperation { override val type = "UPDATE_CAPTION_STYLE" }
     data class AddAudio(val id: ClipId, val assetId: AssetId, val trackId: TrackId, val timelineStart: TimeUs, val duration: DurationUs, val volume: Float) : EditOperation { override val type = "ADD_AUDIO" }
     data class RemoveAudio(val clipId: ClipId) : EditOperation { override val type = "REMOVE_AUDIO" }
     data class SetAudioGain(val clipId: ClipId, val gainDb: Float) : EditOperation { override val type = "SET_AUDIO_GAIN" }
+    data class SetDucking(val trackId: TrackId, val settings: DuckingSettings) : EditOperation { override val type = "SET_DUCKING" }
     data class AddFade(val clipId: ClipId, val fadeType: FadeType, val duration: DurationUs) : EditOperation { override val type = "ADD_FADE" }
     data class ApplyColorAdjustment(val clipId: ClipId, val brightness: Float, val contrast: Float, val saturation: Float) : EditOperation { override val type = "APPLY_COLOR_ADJUSTMENT" }
+    data class AddEffect(val clipId: ClipId, val effectId: EffectId, val effectType: EffectType, val parameters: Map<String, Double>, val range: TimeRangeUs? = null) : EditOperation { override val type = "ADD_EFFECT" }
+    data class UpdateEffect(val clipId: ClipId, val effectId: EffectId, val parameters: Map<String, Double>) : EditOperation { override val type = "UPDATE_EFFECT" }
+    data class RemoveEffect(val clipId: ClipId, val effectId: EffectId) : EditOperation { override val type = "REMOVE_EFFECT" }
+    data class AddTransition(val transition: CreativeTransition) : EditOperation { override val type = "ADD_TRANSITION" }
+    data class RemoveTransition(val transitionId: TransitionId) : EditOperation { override val type = "REMOVE_TRANSITION" }
     data class SetProjectAspectRatio(val width: Int, val height: Int) : EditOperation { override val type = "SET_PROJECT_ASPECT_RATIO" }
     data class SetDurationTarget(val duration: DurationUs, val tolerancePercent: Double) : EditOperation { override val type = "SET_PROJECT_DURATION_TARGET" }
     data class AddConstraint(val constraint: ProjectConstraint) : EditOperation { override val type = "ADD_CONSTRAINT" }
@@ -77,6 +88,10 @@ data class AiEditableProject(
     val constraints: List<ProjectConstraint> = emptyList(),
     val protectedRanges: List<ProtectedRange> = emptyList(),
     val captions: List<CaptionDraft> = emptyList(),
+    val creativeElements: List<CreativeElement> = emptyList(),
+    val creativeEffects: Map<ClipId, List<EffectInstance>> = emptyMap(),
+    val creativeTransitions: List<CreativeTransition> = emptyList(),
+    val ducking: Map<TrackId, DuckingSettings> = emptyMap(),
 ) {
     val revision get() = snapshot.sequence.revision
     val duration: DurationUs get() = DurationUs(snapshot.items.maxOfOrNull { it.timelineStart.value + it.timelineDuration.value } ?: 0)

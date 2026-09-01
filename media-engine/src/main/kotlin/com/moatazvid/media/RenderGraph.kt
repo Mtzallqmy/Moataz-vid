@@ -54,6 +54,13 @@ data class VideoLayer(
     init { require(opacity in 0f..1f) }
 }
 
+data class AudioGainPoint(val timeUs: Long, val gainDb: Float) {
+    init {
+        require(timeUs >= 0)
+        require(gainDb in -60f..24f)
+    }
+}
+
 data class AudioLayer(
     val id: ClipId,
     val trackId: TrackId,
@@ -68,11 +75,15 @@ data class AudioLayer(
     val fadeIn: DurationUs,
     val fadeOut: DurationUs,
     val role: AudioRole,
+    /** Gain automation uses timeline-relative time within this audio item. */
+    val gainAutomation: List<AudioGainPoint> = emptyList(),
 ) {
     init {
         require(gainDb in -60f..24f)
         require(pan in -1f..1f)
         require(fadeIn.value + fadeOut.value <= placement.duration.value)
+        require(gainAutomation.zipWithNext().all { (a, b) -> a.timeUs <= b.timeUs })
+        require(gainAutomation.all { it.timeUs <= placement.duration.value })
     }
 }
 
@@ -161,4 +172,3 @@ data class TransitionNode(
 )
 
 enum class TransitionType { CUT, CROSSFADE, DIP_TO_COLOR }
-
