@@ -111,6 +111,7 @@ fun ProductionEditorScreen(
                     }) { Icon(Icons.Default.ArrowBack, "رجوع") }
                 },
                 actions = {
+                    AiProviderSettingsButton(aiRuntime)
                     IconButton(
                         enabled = !exporting,
                         onClick = { exportLauncher.launch(safeExportName(projectTitle)) },
