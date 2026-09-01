@@ -36,15 +36,16 @@ fun ProductionEditorScreen(
     val context = LocalContext.current
     val application = context.applicationContext as MoatazVidApplication
     val aiRuntime = remember { application.aiProviders }
+    val speechRuntime = remember { application.speech }
     val uiScope = rememberCoroutineScope()
     val surfaceView = remember(projectId.value) { SurfaceView(context).apply { keepScreenOn = true } }
     val runtimeScope = remember(projectId.value) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     val store = remember(projectId.value) { ProductionAiTimelineStore(repository) }
-    val gateway = remember(projectId.value) { ProductionEditorGateway(repository) }
+    val gateway = remember(projectId.value) { ProductionSpeechEditorGateway(repository, speechRuntime) }
     val player = remember(projectId.value) { ProductionEditorPlayer(context, repository, surfaceView, runtimeScope) }
     val persistence = remember(projectId.value) { SharedPreferencesEditorStatePersistence(context) }
-    val aiData = remember(projectId.value) { ProductionAiDataSource(repository) }
-    val ai = remember(projectId.value, aiRuntime) {
+    val aiData = remember(projectId.value) { ProductionSpeechAiDataSource(repository, speechRuntime) }
+    val ai = remember(projectId.value, aiRuntime, speechRuntime) {
         AiEditorEngine(
             data = aiData,
             store = store,
@@ -111,6 +112,7 @@ fun ProductionEditorScreen(
                     }) { Icon(Icons.Default.ArrowBack, "رجوع") }
                 },
                 actions = {
+                    SpeechSettingsButton(speechRuntime, repository, projectId)
                     AiProviderSettingsButton(aiRuntime)
                     IconButton(
                         enabled = !exporting,
