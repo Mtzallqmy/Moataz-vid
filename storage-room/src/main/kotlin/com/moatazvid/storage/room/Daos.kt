@@ -9,6 +9,10 @@ interface ProjectDao {
     @Update suspend fun update(project: ProjectEntity)
     @Query("SELECT * FROM projects WHERE projectId = :id") suspend fun get(id: String): ProjectEntity?
     @Query("SELECT * FROM projects WHERE projectId = :id") fun observe(id: String): Flow<ProjectEntity?>
+    @Query("SELECT * FROM projects ORDER BY updatedAtEpochMs DESC") fun observeAll(): Flow<List<ProjectEntity>>
+    @Query("SELECT * FROM projects ORDER BY updatedAtEpochMs DESC") suspend fun all(): List<ProjectEntity>
+    @Query("UPDATE projects SET title = :title, updatedAtEpochMs = :updatedAtEpochMs, rowRevision = rowRevision + 1 WHERE projectId = :id")
+    suspend fun rename(id: String, title: String, updatedAtEpochMs: Long): Int
     @Query("DELETE FROM projects WHERE projectId = :id") suspend fun delete(id: String): Int
 }
 
@@ -17,10 +21,15 @@ interface TimelineDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertSequence(sequence: SequenceEntity)
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertTracks(tracks: List<TrackEntity>)
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertClips(clips: List<ClipEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertClipProperties(properties: ClipPropertiesEntity)
+    @Update suspend fun updateSequence(sequence: SequenceEntity)
+    @Update suspend fun updateTracks(tracks: List<TrackEntity>)
     @Update suspend fun updateClips(clips: List<ClipEntity>)
     @Delete suspend fun deleteClips(clips: List<ClipEntity>)
+    @Query("SELECT * FROM sequences WHERE sequenceId = :sequenceId") suspend fun sequence(sequenceId: String): SequenceEntity?
     @Query("SELECT * FROM tracks WHERE sequenceId = :sequenceId ORDER BY type, orderIndex") suspend fun tracks(sequenceId: String): List<TrackEntity>
     @Query("SELECT * FROM clips WHERE sequenceId = :sequenceId ORDER BY trackId, timelineStartUs") suspend fun clips(sequenceId: String): List<ClipEntity>
+    @Query("SELECT * FROM clip_properties WHERE clipId IN (:clipIds)") suspend fun clipProperties(clipIds: List<String>): List<ClipPropertiesEntity>
     @Query("UPDATE sequences SET revision = :resultRevision, updatedAtEpochMs = :updatedAt WHERE sequenceId = :sequenceId AND revision = :expectedRevision")
     suspend fun compareAndSetRevision(sequenceId: String, expectedRevision: Long, resultRevision: Long, updatedAt: Long): Int
 }
@@ -31,6 +40,7 @@ interface MediaDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertSource(source: MediaSourceEntity)
     @Update suspend fun updateFileRef(ref: FileReferenceEntity)
     @Query("SELECT * FROM media_sources WHERE projectId = :projectId") suspend fun sources(projectId: String): List<MediaSourceEntity>
+    @Query("SELECT * FROM media_sources WHERE sourceId = :sourceId") suspend fun source(sourceId: String): MediaSourceEntity?
     @Query("SELECT * FROM file_references WHERE fileRefId = :id") suspend fun fileRef(id: String): FileReferenceEntity?
 }
 
