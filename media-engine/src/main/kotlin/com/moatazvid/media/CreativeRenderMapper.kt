@@ -3,7 +3,9 @@ package com.moatazvid.media
 import com.moatazvid.core.*
 
 /** RenderGraph boundary for creative edits. UI and AI never depend on Media3 effect classes. */
-class CreativeRenderMapper {
+class CreativeRenderMapper(
+    private val boundFeatures: Set<RenderFeature> = emptySet(),
+) {
     fun apply(
         base: RenderGraph,
         elements: List<CreativeElement>,
@@ -15,6 +17,9 @@ class CreativeRenderMapper {
         val overlays = base.overlays.toMutableList()
         val videos = base.videoLayers.map { layer ->
             val mappedEffects = clipEffects[layer.id].orEmpty().sortedBy { it.orderIndex }.mapNotNull(::toVideoEffectNode)
+            clipEffects[layer.id].orEmpty().forEach { effect ->
+                compatibility += featureCompatibility(effect.id.value, RenderFeature.CUSTOM_EFFECT, "Effect renderer is not bound")
+            }
             layer.copy(effects = layer.effects + mappedEffects)
         }
         elements.sortedBy { it.zIndex }.forEach { element ->
@@ -28,7 +33,7 @@ class CreativeRenderMapper {
                         text = element.text,
                         styleId = element.styleId,
                     )
-                    compatibility += ElementCompatibility(element.id.value, BackendKind.MEDIA3, BackendKind.MEDIA3, SupportLevel.SUPPORTED)
+                    compatibility += featureCompatibility(element.id.value, RenderFeature.CAPTION_BURN_IN, "Caption renderer is not bound")
                 }
                 is TextElement -> {
                     overlays += OverlayNode.Text(
@@ -39,7 +44,7 @@ class CreativeRenderMapper {
                         text = element.text,
                         styleId = element.styleId,
                     )
-                    compatibility += ElementCompatibility(element.id.value, BackendKind.MEDIA3, BackendKind.MEDIA3, SupportLevel.SUPPORTED)
+                    compatibility += featureCompatibility(element.id.value, RenderFeature.TEXT_OVERLAY, "Text overlay renderer is not bound")
                 }
                 is ImageOverlayElement -> {
                     overlays += OverlayNode.Image(
@@ -49,7 +54,7 @@ class CreativeRenderMapper {
                         opacity = element.transform.opacity,
                         assetId = element.assetId,
                     )
-                    compatibility += ElementCompatibility(element.id.value, BackendKind.MEDIA3, BackendKind.MEDIA3, SupportLevel.SUPPORTED)
+                    compatibility += featureCompatibility(element.id.value, RenderFeature.IMAGE_OVERLAY, "Image overlay renderer is not bound")
                 }
                 is ShapeElement -> {
                     overlays += GraphicOverlayNode(
@@ -62,7 +67,7 @@ class CreativeRenderMapper {
                         strokeArgb = element.strokeArgb,
                         strokeWidth = element.strokeWidth,
                     )
-                    compatibility += ElementCompatibility(element.id.value, BackendKind.MEDIA3, BackendKind.MEDIA3, SupportLevel.SUPPORTED)
+                    compatibility += featureCompatibility(element.id.value, RenderFeature.CUSTOM_EFFECT, "Graphic overlay renderer is not bound")
                 }
                 is VideoOverlayElement -> {
                     compatibility += ElementCompatibility(
@@ -90,8 +95,11 @@ class CreativeRenderMapper {
             )
         }
         transitions.forEach {
-            val support = if (it.type in setOf(CreativeTransitionType.CUT, CreativeTransitionType.FADE, CreativeTransitionType.CROSS_DISSOLVE)) SupportLevel.SUPPORTED else SupportLevel.UNKNOWN
-            compatibility += ElementCompatibility(it.id.value, BackendKind.MEDIA3, BackendKind.MEDIA3, support, if (support == SupportLevel.UNKNOWN) "Requires fallback/capability resolution" else null)
+            compatibility += if (it.type == CreativeTransitionType.CUT) {
+                ElementCompatibility(it.id.value, BackendKind.MEDIA3, BackendKind.MEDIA3, SupportLevel.SUPPORTED)
+            } else {
+                featureCompatibility(it.id.value, RenderFeature.CROSSFADE, "Transition renderer/fallback is not bound")
+            }
         }
         val audioLayers = base.audioLayers + audio.map { clip ->
             val speedRange = clip.sourceRange ?: TimeRangeUs(TimeUs(0), TimeUs(clip.range.duration.value))
@@ -114,6 +122,17 @@ class CreativeRenderMapper {
         return CreativeRenderResult(
             base.copy(videoLayers = videos, audioLayers = audioLayers, overlays = overlays.sortedBy { overlayZIndex(it, elements) }, transitions = transitionNodes),
             CompatibilityReport(compatibility),
+        )
+    }
+
+    private fun featureCompatibility(id: String, feature: RenderFeature, missingReason: String): ElementCompatibility {
+        val supported = feature in boundFeatures
+        return ElementCompatibility(
+            elementId = id,
+            previewBackend = if (supported) BackendKind.MEDIA3 else null,
+            exportBackend = if (supported) BackendKind.MEDIA3 else null,
+            parity = if (supported) SupportLevel.SUPPORTED else SupportLevel.UNKNOWN,
+            reason = if (supported) null else missingReason,
         )
     }
 
