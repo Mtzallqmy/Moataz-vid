@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.*
@@ -89,15 +90,16 @@ fun AiChatPanel(
 
 @Composable fun TranscriptPanel(state: EditorUiState, onSearch: (String) -> Unit, onSeek: (com.moatazvid.speech.TranscriptSearchHit) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
+    val transcript = state.transcript
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Text("النص والتوقيت", style = MaterialTheme.typography.titleLarge)
         OutlinedTextField(query, { query = it; onSearch(it) }, Modifier.fillMaxWidth().padding(vertical = 8.dp), leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("ابحث داخل الكلام") }, singleLine = true)
-        if (state.transcript == null) {
+        if (transcript == null) {
             ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text("لا يوجد تفريغ صوتي لهذا المشروع."); Button({}) { Text("بدء التفريغ") } } }
         } else LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (query.isNotBlank()) items(state.transcriptSearch, key = { "${it.sourceId.value}_${it.sourceRange.start.value}" }) { hit ->
                 ListItem(headlineContent = { Text(hit.text) }, supportingContent = { Text("${hit.sourceId.value} · ${formatDuration(hit.sourceRange.start.value)}") }, modifier = Modifier.clickable { onSeek(hit) })
-            } else items(state.transcript.segments, key = { it.id.value }) { segment ->
+            } else items(transcript.segments, key = { it.id.value }) { segment ->
                 val active = state.playback.currentTime.value in segment.sourceRange.start.value until segment.sourceRange.endExclusive.value
                 ListItem(headlineContent = { Text(segment.text, style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content)) },
                     supportingContent = { Text(formatDuration(segment.sourceRange.start.value)) }, colors = ListItemDefaults.colors(containerColor = if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent))
