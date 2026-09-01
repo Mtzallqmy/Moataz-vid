@@ -39,6 +39,18 @@ class EditPlanValidator(
                 }
             }
             fun generated(id: ClipId?) { if (id != null && (id in items || !generatedIds.add(id))) errors += error("DUPLICATE_ID", path, id.value) }
+            fun validateEffectParameters(effectType: EffectType, parameters: Map<String, Double>, parameterPath: String) {
+                val descriptor = DefaultCreativeDescriptors.effects[effectType]
+                if (descriptor == null || descriptor.exportSupport == SupportLevel.UNSUPPORTED) {
+                    errors += error("UNSUPPORTED_EFFECT", "$path.effectType", effectType.name)
+                    return
+                }
+                parameters.forEach { (name, value) ->
+                    val range = descriptor.parameterRanges[name]
+                    if (range == null) errors += error("UNKNOWN_EFFECT_PARAMETER", "$parameterPath.$name", name)
+                    else if (value !in range) errors += error("INVALID_EFFECT_PARAMETER", "$parameterPath.$name", value.toString())
+                }
+            }
             when (operation) {
                 is EditOperation.TrimClip -> editable(operation.clipId)?.let { clip ->
                     sourceRange(requireNotNull(clip.sourceId), operation.sourceRange)
@@ -76,14 +88,13 @@ class EditPlanValidator(
                 is EditOperation.ApplyColorAdjustment -> { editable(operation.clipId); if (operation.brightness !in -1f..1f || operation.contrast !in 0f..2f || operation.saturation !in 0f..2f) errors += error("INVALID_COLOR", path, "Color limits") }
                 is EditOperation.AddEffect -> {
                     editable(operation.clipId)
-                    val descriptor = DefaultCreativeDescriptors.effects[operation.effectType]
-                    if (descriptor == null || descriptor.exportSupport == SupportLevel.UNSUPPORTED) errors += error("UNSUPPORTED_EFFECT", "$path.effectType", operation.effectType.name)
-                    descriptor?.parameterRanges?.forEach { (name, range) -> operation.parameters[name]?.let { if (it !in range) errors += error("INVALID_EFFECT_PARAMETER", "$path.parameters.$name", it.toString()) } }
-                    if (operation.parameters.values.any { kotlin.math.abs(it) > 1000.0 }) errors += error("INVALID_EFFECT_PARAMETER", "$path.parameters", "Unbounded value")
+                    validateEffectParameters(operation.effectType, operation.parameters, "$path.parameters")
                 }
                 is EditOperation.UpdateEffect -> {
                     editable(operation.clipId)
-                    if (project.creativeEffects[operation.clipId].orEmpty().none { it.id == operation.effectId }) errors += error("UNKNOWN_EFFECT", "$path.effectId", operation.effectId.value)
+                    val effect = project.creativeEffects[operation.clipId].orEmpty().firstOrNull { it.id == operation.effectId }
+                    if (effect == null) errors += error("UNKNOWN_EFFECT", "$path.effectId", operation.effectId.value)
+                    else validateEffectParameters(effect.type, operation.parameters, "$path.parameters")
                 }
                 is EditOperation.RemoveEffect -> {
                     editable(operation.clipId)
