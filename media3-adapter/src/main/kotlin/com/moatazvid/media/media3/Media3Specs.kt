@@ -63,6 +63,9 @@ data class Media3EditedItemSpec(
     val removeVideo: Boolean,
     val speed: Double,
     val gainDb: Float,
+    val fadeInUs: Long = 0,
+    val fadeOutUs: Long = 0,
+    val gainAutomation: List<AudioGainPoint> = emptyList(),
     val transform: TransformNode?,
     val effects: List<VideoEffectNode>,
 ) {
@@ -70,6 +73,8 @@ data class Media3EditedItemSpec(
         require(sourceDurationUs > 0)
         require(sourceStartUs >= 0 && sourceEndUs > sourceStartUs && sourceEndUs <= sourceDurationUs)
         require(timelineStartUs >= 0 && timelineDurationUs > 0)
+        require(fadeInUs >= 0 && fadeOutUs >= 0 && fadeInUs + fadeOutUs <= timelineDurationUs)
+        require(gainAutomation.all { it.timeUs <= timelineDurationUs })
     }
 }
 
@@ -125,6 +130,9 @@ class Media3CompositionMapper(private val resolver: Media3InputResolver) {
                     removeVideo = true,
                     speed = it.speed.constantSpeedOrNull ?: error("Variable speed requires fallback"),
                     gainDb = if (it.muted) -60f else it.gainDb,
+                    fadeInUs = it.fadeIn.value,
+                    fadeOutUs = it.fadeOut.value,
+                    gainAutomation = if (it.muted) emptyList() else it.gainAutomation,
                     transform = null,
                     effects = emptyList(),
                 )
