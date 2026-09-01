@@ -94,6 +94,7 @@ class CreativeRenderMapper {
             compatibility += ElementCompatibility(it.id.value, BackendKind.MEDIA3, BackendKind.MEDIA3, support, if (support == SupportLevel.UNKNOWN) "Requires fallback/capability resolution" else null)
         }
         val audioLayers = base.audioLayers + audio.map { clip ->
+            val speedRange = clip.sourceRange ?: TimeRangeUs(TimeUs(0), TimeUs(clip.range.duration.value))
             AudioLayer(
                 id = clip.id,
                 trackId = clip.trackId,
@@ -104,7 +105,7 @@ class CreativeRenderMapper {
                 pan = 0f,
                 muted = clip.muted,
                 preservePitch = true,
-                speed = SpeedCurve(listOf(SpeedSegmentNode(clip.sourceRange ?: TimeRangeUs(TimeUs.ZERO, TimeUs(clip.range.duration.value)), 1.0, 1.0, SpeedInterpolation.CONSTANT))),
+                speed = SpeedCurve(listOf(SpeedSegmentNode(speedRange, 1.0, 1.0, SpeedInterpolation.CONSTANT))),
                 fadeIn = DurationUs(clip.fadeInMs * 1_000),
                 fadeOut = DurationUs(clip.fadeOutMs * 1_000),
                 role = AudioRole.MUSIC,
