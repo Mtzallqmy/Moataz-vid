@@ -49,14 +49,15 @@ class CapabilityResolver {
         if (graph.videoLayers.any { it.transform != TransformNode() }) add(RenderFeature.CROP)
         if (graph.videoLayers.any { it.speed.constantSpeedOrNull != 1.0 }) add(RenderFeature.CONSTANT_SPEED)
         if (graph.videoLayers.any { !it.speed.isConstant }) add(RenderFeature.VARIABLE_SPEED)
+        if (graph.videoLayers.any { it.effects.isNotEmpty() }) add(RenderFeature.CUSTOM_EFFECT)
         if (graph.audioLayers.size > 1) add(RenderFeature.AUDIO_MIX)
         if (graph.audioLayers.any { it.fadeIn.value > 0 || it.fadeOut.value > 0 }) add(RenderFeature.AUDIO_FADE)
         if (graph.overlays.any { it is OverlayNode.Text }) add(RenderFeature.TEXT_OVERLAY)
         if (graph.overlays.any { it is OverlayNode.Caption }) add(RenderFeature.CAPTION_BURN_IN)
         if (graph.overlays.any { it is OverlayNode.Image }) add(RenderFeature.IMAGE_OVERLAY)
-        if (graph.transitions.any { it.type == TransitionType.CROSSFADE }) add(RenderFeature.CROSSFADE)
+        if (graph.overlays.any { it is GraphicOverlayNode }) add(RenderFeature.CUSTOM_EFFECT)
+        if (graph.transitions.any { it.type == TransitionType.CROSSFADE || it.type == TransitionType.DIP_TO_COLOR }) add(RenderFeature.CROSSFADE)
         if (graph.canvas.colorMode == ProjectColorMode.HDR_KEEP) add(RenderFeature.KEEP_HDR)
         if (graph.canvas.colorMode == ProjectColorMode.HDR_TO_SDR) add(RenderFeature.TONE_MAP_HDR)
     }
 }
-
