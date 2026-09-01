@@ -14,6 +14,11 @@ interface ProjectDao {
     @Query("UPDATE projects SET title = :title, updatedAtEpochMs = :updatedAtEpochMs, rowRevision = rowRevision + 1 WHERE projectId = :id")
     suspend fun rename(id: String, title: String, updatedAtEpochMs: Long): Int
     @Query("DELETE FROM projects WHERE projectId = :id") suspend fun delete(id: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertConstraint(constraint: ProjectConstraintEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertProtectedRange(range: ProtectedRangeEntity)
+    @Query("SELECT * FROM project_constraints WHERE projectId = :projectId AND enabled = 1 ORDER BY createdAtEpochMs") suspend fun constraints(projectId: String): List<ProjectConstraintEntity>
+    @Query("SELECT * FROM protected_ranges WHERE projectId = :projectId AND enabled = 1 ORDER BY startUs") suspend fun protectedRanges(projectId: String): List<ProtectedRangeEntity>
 }
 
 @Dao
