@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
 class CreativeProductionTest {
-    @Test fun `creative mapper preserves z order and effect chain`() {
+    @Test fun `creative mapper preserves z order and reports unbound parity honestly`() {
         val graph = graph()
         val text = TextElement(CreativeElementId("title"), TrackId("overlay"), range(0, 2_000_000), "مرحبا", "title", zIndex = 80)
         val logo = ImageOverlayElement(CreativeElementId("logo"), TrackId("overlay"), range(0, 5_000_000), AssetId("logo"), zIndex = 60)
@@ -14,6 +14,16 @@ class CreativeProductionTest {
         val mapped = CreativeRenderMapper().apply(graph, listOf(text, logo), mapOf(ClipId("clip") to listOf(effect)))
         assertEquals(listOf("logo", "title"), mapped.graph.overlays.map { it.id })
         assertTrue(mapped.graph.videoLayers.single().effects.isNotEmpty())
+        assertFalse(mapped.compatibility.fullParity)
+        assertTrue(mapped.compatibility.elements.all { it.parity == SupportLevel.UNKNOWN })
+    }
+
+    @Test fun `bound creative renderer reports supported parity`() {
+        val mapper = CreativeRenderMapper(setOf(RenderFeature.TEXT_OVERLAY, RenderFeature.IMAGE_OVERLAY, RenderFeature.CUSTOM_EFFECT))
+        val text = TextElement(CreativeElementId("title"), TrackId("overlay"), range(0, 2_000_000), "مرحبا", "title")
+        val logo = ImageOverlayElement(CreativeElementId("logo"), TrackId("overlay"), range(0, 2_000_000), AssetId("logo"))
+        val effect = EffectInstance(EffectId("e1"), EffectType.BRIGHTNESS, listOf(EffectParameter("amount", 0.2, -1.0, 1.0)))
+        val mapped = mapper.apply(graph(), listOf(text, logo), mapOf(ClipId("clip") to listOf(effect)))
         assertTrue(mapped.compatibility.fullParity)
     }
 
