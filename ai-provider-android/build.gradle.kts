@@ -1,4 +1,7 @@
-plugins { alias(libs.plugins.android.library) }
+plugins {
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.android)
+}
 android {
     namespace = "com.moatazvid.ai.provider.android"
     compileSdk = 36

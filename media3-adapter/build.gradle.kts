@@ -1,4 +1,7 @@
-plugins { alias(libs.plugins.android.library) }
+plugins {
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.android)
+}
 
 android {
     namespace = "com.moatazvid.media.media3"
@@ -20,4 +23,3 @@ dependencies {
     implementation(libs.work.runtime)
     implementation(libs.kotlinx.coroutines.core)
 }
-
