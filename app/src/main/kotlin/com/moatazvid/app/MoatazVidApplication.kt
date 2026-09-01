@@ -14,9 +14,15 @@ class MoatazVidApplication : Application() {
         ProductionAiProviderRuntime(this, projects.database)
     }
 
+    val speech: ProductionSpeechRuntime by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        ProductionSpeechRuntime(this, projects)
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        // Worker processes need their persisted transcription runner registered before WorkManager executes.
+        speech
     }
 
     private fun createNotificationChannels() {
