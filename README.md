@@ -31,6 +31,8 @@ User Request
 - [المرحلة الرابعة: Local Speech + Transcript + Analysis](docs/stage-04-local-speech-transcript-analysis.md)
 - [المرحلة الخامسة: AI Provider System](docs/stage-05-ai-provider-system.md)
 - [المرحلة السادسة: AI Chat Editing Core](docs/stage-06-ai-chat-editing-core.md)
+- [المرحلة السابعة: Editor UI + AI Experience](docs/stage-07-editor-ui-ai-experience.md)
+- [تقرير تنفيذ المرحلتين 6 و7](docs/implementation-report-stages-06-07.md)
 - [تقرير تنفيذ المرحلتين 4 و5](docs/implementation-report-stages-04-05.md)
 - [تقرير تنفيذ المرحلتين 2 و3](docs/implementation-report-stages-02-03.md)
 - [إشعارات الأطراف الثالثة](THIRD_PARTY_NOTICES.md)
@@ -44,7 +46,8 @@ User Request
 - [x] المرحلة الرابعة: Local Whisper + Transcript + Analysis foundation.
 - [x] المرحلة الخامسة: Unified AI Provider System foundation.
 - [x] المرحلة السادسة: Chat Editing وContext وEditPlan validation/simulation/apply.
-- [ ] المرحلة السابعة وما بعدها: Editor UI وتجربة Timeline.
+- [x] المرحلة السابعة: Editor UI وTimeline يدوي وتجربة AI pending plans.
+- [ ] المرحلتان الثامنة والتاسعة (لا تبدأان دون طلب صريح).
 
 ## الحقوق
 

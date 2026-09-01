@@ -22,6 +22,7 @@ include(":media-engine")
 include(":speech-core")
 include(":ai-provider-core")
 include(":ai-editor-core")
+include(":editor-core")
 
 // Android adapters are real source modules, but are opt-in so the pure core can be
 // built on hosts that do not have an Android SDK (documentation/CI lint workers).
@@ -30,4 +31,5 @@ if (providers.gradleProperty("includeAndroidModules").orNull == "true") {
     include(":media3-adapter")
     include(":speech-android")
     include(":ai-provider-android")
+    include(":editor-ui")
 }

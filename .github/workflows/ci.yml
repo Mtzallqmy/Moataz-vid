@@ -19,4 +19,19 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :core-model:test :storage-core:test :media-engine:test :speech-core:test :ai-provider-core:test :ai-editor-core:test
+      - run: ./gradlew :core-model:test :storage-core:test :media-engine:test :speech-core:test :ai-provider-core:test :ai-editor-core:test :editor-core:test
+
+  android-editor-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew -PincludeAndroidModules=true :editor-ui:assembleDebug :editor-ui:compileDebugAndroidTestKotlin

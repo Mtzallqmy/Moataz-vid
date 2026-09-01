@@ -4,6 +4,7 @@ import com.moatazvid.storage.*
 import com.moatazvid.speech.*
 import com.moatazvid.ai.provider.*
 import com.moatazvid.ai.editor.*
+import com.moatazvid.editor.*
 import java.nio.file.Files
 
 private fun checkCondition(value: Boolean, message: String) {
@@ -85,6 +86,8 @@ fun main() {
     checkCondition(RedactingNetworkLogger(true).requestSummary(HttpRequest(RequestId("r"), "POST", "https://example.test", mapOf("Authorization" to "Bearer secret"), "private", 1_000, true)).contains("<redacted>"), "secret redaction")
     checkCondition(ArabicIntentClassifier().classify("احذف الصمت").intent == AiIntent.EDIT_PROJECT, "Arabic edit intent")
     checkCondition(ArabicIntentClassifier().classify("لا تحذف السعر").intent == AiIntent.PROJECT_CONSTRAINT, "Arabic constraint intent")
+    val viewport = TimelineViewportState(pixelsPerSecond = 100.0, scrollOffsetPx = 100.0, viewportWidthPx = 500.0)
+    checkCondition(viewport.visibleRange.start.value == 1_000_000L && viewport.visibleRange.duration.value == 5_000_000L, "timeline viewport precision")
 
     println("Moataz vid core smoke tests: PASS")
 }
