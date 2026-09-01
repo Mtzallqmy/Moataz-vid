@@ -62,6 +62,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.room3.runtime)
     implementation(libs.work.runtime)
+    implementation(libs.media3.common)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.transformer)
 
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
