@@ -32,8 +32,13 @@ enum class PreviewQuality { AUTO, LOW, MEDIUM, HIGH }
 data class PlaybackUiState(val status: PlaybackStatus = PlaybackStatus.IDLE, val currentTime: TimeUs = TimeUs(0), val duration: DurationUs = DurationUs(0), val muted: Boolean = false, val quality: PreviewQuality = PreviewQuality.AUTO)
 
 data class EditorSelectionContext(val clipIds: Set<ClipId>, val timelineRange: TimeRangeUs?, val selectedTranscriptWordIds: Set<TranscriptWordId> = emptySet())
-enum class InspectorKind { NONE, VIDEO, AUDIO, TEXT, CAPTION }
-data class InspectorUiState(val kind: InspectorKind = InspectorKind.NONE, val visible: Boolean = false, val selectedClipId: ClipId? = null)
+enum class InspectorKind { NONE, VIDEO, AUDIO, TEXT, CAPTION, IMAGE, TRANSITION }
+data class InspectorUiState(
+    val kind: InspectorKind = InspectorKind.NONE,
+    val visible: Boolean = false,
+    val selectedClipId: ClipId? = null,
+    val selectedTransitionId: String? = null,
+)
 
 enum class AiChatStage { IDLE, THINKING, USING_TOOLS, BUILDING_PLAN, SIMULATING, PLAN_READY, APPLYING, DONE, ERROR, CANCELLED }
 data class ChatBubble(val id: String, val fromUser: Boolean, val text: String, val streaming: Boolean = false, val error: Boolean = false)
