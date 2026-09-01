@@ -199,19 +199,23 @@ class ProductionProjectRepository private constructor(
             Track(TrackId(row.trackId), SequenceId(row.sequenceId), TrackType.valueOf(row.type), row.orderIndex, CollisionPolicy.valueOf(row.collisionPolicy), row.locked, row.muted, row.hidden)
         }
         val items = clipRows.map { row ->
+            val sourceInUs = row.sourceInUs
+            val sourceOutUs = row.sourceOutUs
             TimelineItem(
                 ClipId(row.clipId), ProjectId(row.projectId), SequenceId(row.sequenceId), TrackId(row.trackId), TimelineItemType.valueOf(row.itemType),
                 TimeUs(row.timelineStartUs), DurationUs(row.timelineDurationUs), row.sourceId?.let(::SourceId),
-                if (row.sourceInUs != null && row.sourceOutUs != null) TimeRangeUs(TimeUs(row.sourceInUs), TimeUs(row.sourceOutUs)) else null,
+                if (sourceInUs != null && sourceOutUs != null) TimeRangeUs(TimeUs(sourceInUs), TimeUs(sourceOutUs)) else null,
                 row.enabled, row.locked, row.linkGroupId,
             )
         }
         val itemById = items.associateBy { it.id }
         val sources = sourceRows.map { row ->
+            val fpsNumerator = row.fpsNumerator
+            val fpsDenominator = row.fpsDenominator
             MediaSource(
                 SourceId(row.sourceId), ProjectId(row.projectId), MediaKind.valueOf(row.kind), row.displayName, row.fileRefId,
                 ImportMode.valueOf(row.importMode), row.mimeType, row.durationUs?.let(::DurationUs), row.codedWidth, row.codedHeight,
-                row.rotationDegrees, if (row.fpsNumerator != null && row.fpsDenominator != null) Rational(row.fpsNumerator, row.fpsDenominator) else null,
+                row.rotationDegrees, if (fpsNumerator != null && fpsDenominator != null) Rational(fpsNumerator, fpsDenominator) else null,
                 row.quickFingerprint, SourceAvailability.valueOf(row.availability),
             )
         }
@@ -223,8 +227,8 @@ class ProductionProjectRepository private constructor(
                 transform = row.transformJson?.let(::decodeTransformNode) ?: TransformNode(),
                 cropAspectRatio = row.extraJson?.let { runCatching { JSONObject(it).optString("cropAspectRatio").takeIf(String::isNotBlank) }.getOrNull() },
                 fades = buildList {
-                    if (row.fadeInUs > 0) add(FadeType.AUDIO_IN to DurationUs(row.fadeInUs))
-                    if (row.fadeOutUs > 0) add(FadeType.AUDIO_OUT to DurationUs(row.fadeOutUs))
+                    if (row.fadeInUs > 0) add(com.moatazvid.ai.editor.FadeType.AUDIO_IN to DurationUs(row.fadeInUs))
+                    if (row.fadeOutUs > 0) add(com.moatazvid.ai.editor.FadeType.AUDIO_OUT to DurationUs(row.fadeOutUs))
                 },
             )
         }
@@ -322,8 +326,8 @@ class ProductionProjectRepository private constructor(
         }
         val clipProperties = state.snapshot.items.mapNotNull { item ->
             val prop = state.clipProperties[item.id] ?: return@mapNotNull null
-            val fadeIn = prop.fades.filter { it.first in setOf(FadeType.AUDIO_IN, FadeType.VIDEO_IN) }.maxOfOrNull { it.second.value } ?: 0L
-            val fadeOut = prop.fades.filter { it.first in setOf(FadeType.AUDIO_OUT, FadeType.VIDEO_OUT) }.maxOfOrNull { it.second.value } ?: 0L
+            val fadeIn = prop.fades.filter { it.first in setOf(com.moatazvid.ai.editor.FadeType.AUDIO_IN, com.moatazvid.ai.editor.FadeType.VIDEO_IN) }.maxOfOrNull { it.second.value } ?: 0L
+            val fadeOut = prop.fades.filter { it.first in setOf(com.moatazvid.ai.editor.FadeType.AUDIO_OUT, com.moatazvid.ai.editor.FadeType.VIDEO_OUT) }.maxOfOrNull { it.second.value } ?: 0L
             ClipPropertiesEntity(
                 item.id.value, null, 1f, prop.gainDb, 0f, false, prop.preservePitch,
                 fadeIn, fadeOut, prop.speed.toString(), encodeTransformNode(prop.transform),
