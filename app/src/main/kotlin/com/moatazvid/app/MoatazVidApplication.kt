@@ -6,6 +6,10 @@ import android.app.NotificationManager
 import android.os.Build
 
 class MoatazVidApplication : Application() {
+    val projects: ProductionProjectRepository by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        ProductionProjectRepository.create(this)
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
