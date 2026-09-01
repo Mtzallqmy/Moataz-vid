@@ -16,6 +16,11 @@ interface CompositionPlayerFacade {
     suspend fun prepare(sessionId: String, composition: Media3CompositionSpec, surface: PreviewSurface)
     suspend fun replace(sessionId: String, composition: Media3CompositionSpec)
     suspend fun seek(sessionId: String, position: TimeUs)
+    suspend fun play(sessionId: String)
+    suspend fun pause(sessionId: String)
+    suspend fun setMuted(sessionId: String, muted: Boolean)
+    suspend fun currentPosition(sessionId: String): TimeUs
+    suspend fun isPlaying(sessionId: String): Boolean
     suspend fun release(sessionId: String)
 }
 
@@ -24,4 +29,3 @@ interface CodecCapabilityDetector {
     suspend fun canEncode(settings: ExportSettings): Boolean
     suspend fun canDecode(probe: MediaProbe): Boolean
 }
-
