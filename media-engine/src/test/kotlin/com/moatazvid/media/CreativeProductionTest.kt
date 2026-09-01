@@ -20,8 +20,8 @@ class CreativeProductionTest {
     @Test fun `ducking envelope reduces music only around speech`() {
         val settings = DuckingSettings(DuckingMode.AUTO_SPEECH_DUCK, reductionDb = -14f, attackMs = 100, releaseMs = 300)
         val points = DuckingProcessor().buildEnvelope(listOf(range(1_000_000, 2_000_000)), DurationUs(4_000_000), settings)
-        assertTrue(points.any { it.timeMs == 1_000 && it.gainDb == -14f })
-        assertTrue(points.any { it.timeMs == 2_300 && it.gainDb == 0f })
+        assertTrue(points.any { it.timeMs == 1_000L && it.gainDb == -14f })
+        assertTrue(points.any { it.timeMs == 2_300L && it.gainDb == 0f })
     }
 
     @Test fun `too long transition is rejected`() {
