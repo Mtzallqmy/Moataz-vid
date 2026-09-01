@@ -46,7 +46,9 @@ interface TransactionDao {
 
 @Dao
 interface CacheDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertProxy(proxy: ProxyEntity)
     @Query("SELECT * FROM proxies WHERE sourceId = :sourceId") suspend fun proxies(sourceId: String): List<ProxyEntity>
+    @Query("SELECT * FROM proxies WHERE status IN ('QUEUED','RUNNING')") suspend fun activeProxies(): List<ProxyEntity>
     @Query("DELETE FROM proxies WHERE proxyId IN (:ids)") suspend fun deleteProxies(ids: List<String>): Int
     @Query("SELECT * FROM analysis_records WHERE projectId = :projectId") suspend fun analyses(projectId: String): List<AnalysisEntity>
 }
@@ -55,7 +57,9 @@ interface CacheDao {
 interface ExportDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insert(record: ExportRecordEntity)
     @Update suspend fun update(record: ExportRecordEntity)
+    @Query("SELECT * FROM export_records WHERE exportId = :exportId") suspend fun get(exportId: String): ExportRecordEntity?
+    @Query("SELECT * FROM export_records WHERE status IN ('QUEUED','RUNNING','VALIDATING','RENDERING','VERIFYING','FINALIZING') ORDER BY createdAtEpochMs")
+    suspend fun activeJobs(): List<ExportRecordEntity>
     @Query("SELECT * FROM export_records WHERE projectId = :projectId ORDER BY createdAtEpochMs DESC")
     fun observeHistory(projectId: String): Flow<List<ExportRecordEntity>>
 }
-
