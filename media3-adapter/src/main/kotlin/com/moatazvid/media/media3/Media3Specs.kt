@@ -56,6 +56,9 @@ data class Media3EditedItemSpec(
     val sourceDurationUs: Long,
     val sourceStartUs: Long,
     val sourceEndUs: Long,
+    /** Explicit placement prevents sequential-only assumptions in mixed timelines. */
+    val timelineStartUs: Long,
+    val timelineDurationUs: Long,
     val removeAudio: Boolean,
     val removeVideo: Boolean,
     val speed: Double,
@@ -66,6 +69,7 @@ data class Media3EditedItemSpec(
     init {
         require(sourceDurationUs > 0)
         require(sourceStartUs >= 0 && sourceEndUs > sourceStartUs && sourceEndUs <= sourceDurationUs)
+        require(timelineStartUs >= 0 && timelineDurationUs > 0)
     }
 }
 
@@ -88,6 +92,8 @@ class Media3CompositionMapper(private val resolver: Media3InputResolver) {
                     sourceDurationUs = sourceDuration,
                     sourceStartUs = it.sourceRange.start.value,
                     sourceEndUs = it.sourceRange.endExclusive.value,
+                    timelineStartUs = it.placement.start.value,
+                    timelineDurationUs = it.placement.duration.value,
                     removeAudio = !it.includeSourceAudio,
                     removeVideo = false,
                     speed = it.speed.constantSpeedOrNull ?: error("Variable speed requires fallback"),
@@ -113,6 +119,8 @@ class Media3CompositionMapper(private val resolver: Media3InputResolver) {
                     sourceDurationUs = sourceDuration,
                     sourceStartUs = startUs,
                     sourceEndUs = endUs,
+                    timelineStartUs = it.placement.start.value,
+                    timelineDurationUs = it.placement.duration.value,
                     removeAudio = false,
                     removeVideo = true,
                     speed = it.speed.constantSpeedOrNull ?: error("Variable speed requires fallback"),
