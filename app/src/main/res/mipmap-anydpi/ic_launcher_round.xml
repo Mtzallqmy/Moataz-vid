@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="@color/moataz_launcher_background" android:pathData="M54,0a54,54 0,1 0,0 108a54,54 0,1 0,0 -108" />
+    <path android:fillColor="@color/moataz_launcher_foreground" android:pathData="M28,33c0,-4.4 3.6,-8 8,-8h36c4.4,0 8,3.6 8,8v42c0,4.4 -3.6,8 -8,8H36c-4.4,0 -8,-3.6 -8,-8z" />
+    <path android:fillColor="@color/moataz_launcher_background" android:pathData="M46,41L70,54L46,67z" />
+</vector>
