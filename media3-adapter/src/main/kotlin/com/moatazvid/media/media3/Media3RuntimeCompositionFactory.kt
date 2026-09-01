@@ -23,6 +23,7 @@ import androidx.media3.effect.BitmapOverlay
 import androidx.media3.effect.Brightness
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.Crop
+import androidx.media3.effect.FrameDropEffect
 import androidx.media3.effect.GaussianBlur
 import androidx.media3.effect.HslAdjustment
 import androidx.media3.effect.OverlayEffect
@@ -73,9 +74,10 @@ class Media3RuntimeCompositionFactory(
         val sequences = spec.sequences.map(::buildSequence)
         val compositionVideoEffects = buildList<Effect> {
             add(Presentation.createForWidthAndHeight(spec.canvas.width, spec.canvas.height, Presentation.LAYOUT_SCALE_TO_FIT))
-            spec.overlays.sortedBy { it.startUs }.forEach { overlay ->
-                buildTimedOverlay(overlay)?.let(::add)
-            }
+            // Media3's FrameDropEffect accepts float targets, so NTSC rationals such as 30000/1001
+            // do not need to be rounded to integer fps. It only drops; it never invents frames.
+            add(FrameDropEffect.createDefaultFrameDropEffect(spec.canvas.frameRate.asDouble().toFloat()))
+            spec.overlays.sortedBy { it.startUs }.forEach { overlay -> buildTimedOverlay(overlay)?.let(::add) }
         }
         val builder = Composition.Builder(sequences)
             .setHdrMode(
@@ -142,6 +144,7 @@ class Media3RuntimeCompositionFactory(
 
     private fun buildItemVideoEffects(spec: Media3EditedItemSpec): List<Effect> = buildList {
         spec.transform?.let { transform -> addAll(transformEffects(transform)) }
+        if (spec.videoOpacity != 1f) add(AlphaScale(spec.videoOpacity))
         spec.effects.forEach { node ->
             when (node) {
                 is VideoEffectNode.ColorAdjustment -> {
@@ -205,7 +208,7 @@ class Media3RuntimeCompositionFactory(
             }
             spannable.setSpan(StyleSpan(typefaceStyle), 0, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-        // Android's text layout performs Arabic shaping and Unicode bidi on the unmodified text,
+        // Android text layout performs Arabic shaping and Unicode bidi on the unmodified text,
         // preserving embedded Latin model IDs, URLs and timecodes instead of manually reversing them.
         return TextOverlay.createStaticTextOverlay(spannable, overlaySettings(spec.transform, spec.opacity))
     }
@@ -251,7 +254,7 @@ class Media3RuntimeCompositionFactory(
 
     private fun overlaySettings(transform: TransformNode, opacity: Float): StaticOverlaySettings =
         StaticOverlaySettings.Builder()
-            .setAlphaScale(opacity.coerceAtLeast(0f))
+            .setAlphaScale(opacity.coerceIn(0f, 1f))
             .setBackgroundFrameAnchor((transform.positionX * 2f - 1f).coerceIn(-1f, 1f), (1f - transform.positionY * 2f).coerceIn(-1f, 1f))
             .setOverlayFrameAnchor(0f, 0f)
             .setScale(transform.scaleX, transform.scaleY)
