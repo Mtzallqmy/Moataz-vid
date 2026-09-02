@@ -17,7 +17,7 @@ import androidx.room3.RoomDatabase
         SpeechModelPackEntity::class,
         AiProviderProfileEntity::class, AiModelAssignmentEntity::class, AiProviderPreferenceEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class MoatazVidDatabase : RoomDatabase() {
@@ -32,6 +32,6 @@ abstract class MoatazVidDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "moataz_vid.db"
-        const val SCHEMA_VERSION = 3
+        const val SCHEMA_VERSION = 4
     }
 }
