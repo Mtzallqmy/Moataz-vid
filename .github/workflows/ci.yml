@@ -1,4 +1,4 @@
-name: Core CI
+name: Production CI
 
 on:
   push:
@@ -7,8 +7,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: production-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   core-tests:
+    name: Core + video-use tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,8 +24,17 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Run core tests
-        run: ./gradlew -PincludeAndroidModules=false :core-model:test :storage-core:test :media-engine:test :speech-core:test :ai-provider-core:test :ai-editor-core:test :editor-core:test
+      - name: Run deterministic core tests
+        run: >-
+          ./gradlew -PincludeAndroidModules=false
+          :core-model:test
+          :storage-core:test
+          :media-engine:test
+          :speech-core:test
+          :video-use-core:test
+          :ai-provider-core:test
+          :ai-editor-core:test
+          :editor-core:test
       - name: Summarize unit tests
         if: always()
         run: |
@@ -35,11 +49,12 @@ jobs:
           passed = totals['tests'] - totals['failures'] - totals['errors'] - totals['skipped']
           line = f"Unit tests: total={totals['tests']} passed={passed} failed={totals['failures'] + totals['errors']} skipped={totals['skipped']}"
           print(line)
-          with open('/tmp/unit-test-summary.txt', 'w') as f: f.write(line + '\n')
-          with open(__import__('os').environ['GITHUB_STEP_SUMMARY'], 'a') as f: f.write('### ' + line + '\n')
+          with open(__import__('os').environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write('### ' + line + '\n')
           PY
 
   android-production-build:
+    name: Android build + lint + packaging audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,28 +68,105 @@ jobs:
       - name: Install Android toolchain
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Compile editor instrumentation sources
+      - name: Compile instrumentation sources
         run: ./gradlew -PincludeAndroidModules=true :editor-ui:compileDebugAndroidTestKotlin
-      - name: Build production application
-        run: ./gradlew -PincludeAndroidModules=true :app:assembleDebug :app:assembleRelease :app:lintDebug
-      - name: Prepare ARM64 APK artifacts
+      - name: Build APKs, AAB and lint
+        run: >-
+          ./gradlew -PincludeAndroidModules=true
+          :app:assembleDebug
+          :app:assembleRelease
+          :app:bundleRelease
+          :app:lintDebug
+          :app:lintRelease
+      - name: Prepare distributable build artifacts
         run: |
           set -euxo pipefail
           mkdir -p release-artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/Moataz-vid-1.0.0-arm64-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/Moataz-vid-1.1.0-debug.apk
           if [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
-            cp app/build/outputs/apk/release/app-release-unsigned.apk release-artifacts/Moataz-vid-1.0.0-arm64-release-unsigned.apk
+            cp app/build/outputs/apk/release/app-release-unsigned.apk release-artifacts/Moataz-vid-1.1.0-release-unsigned.apk
           elif [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            cp app/build/outputs/apk/release/app-release.apk release-artifacts/Moataz-vid-1.0.0-arm64-release.apk
+            cp app/build/outputs/apk/release/app-release.apk release-artifacts/Moataz-vid-1.1.0-release.apk
           fi
-          sha256sum release-artifacts/*.apk | tee release-artifacts/SHA256SUMS.txt
-          for apk in release-artifacts/*.apk; do
-            echo "### $(basename "$apk")" >> "$GITHUB_STEP_SUMMARY"
-            aapt dump badging "$apk" | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)" >> "$GITHUB_STEP_SUMMARY" || true
-            unzip -l "$apk" | grep 'lib/arm64-v8a/.*\.so' | head -30 >> "$GITHUB_STEP_SUMMARY" || true
-          done
+          if [ -f app/build/outputs/bundle/release/app-release.aab ]; then
+            cp app/build/outputs/bundle/release/app-release.aab release-artifacts/Moataz-vid-1.1.0-release.aab
+          fi
+          sha256sum release-artifacts/* | tee release-artifacts/SHA256SUMS.txt
+          aapt dump badging release-artifacts/Moataz-vid-1.1.0-debug.apk | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "### Native libraries" >> "$GITHUB_STEP_SUMMARY"
+          unzip -l release-artifacts/Moataz-vid-1.1.0-debug.apk | grep -E 'lib/(arm64-v8a|x86_64)/.*\.so' | head -60 >> "$GITHUB_STEP_SUMMARY" || true
+          aapt dump badging release-artifacts/Moataz-vid-1.1.0-debug.apk | grep "native-code:" | grep "arm64-v8a" | grep "x86_64"
       - uses: actions/upload-artifact@v4
         with:
-          name: moataz-vid-arm64-apks
+          name: moataz-vid-production-builds
           path: release-artifacts/
           if-no-files-found: error
+          retention-days: 14
+
+  android-runtime-smoke:
+    name: Android emulator launch + instrumentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install emulator toolchain
+        run: |
+          sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973" "cmake;3.22.1" "emulator" "system-images;android-35;google_apis;x86_64"
+      - name: Build x86_64 debug APK and instrumentation
+        run: ./gradlew -PincludeAndroidModules=true :app:assembleDebug :editor-ui:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chown root:$(id -gn) /dev/kvm
+            sudo chmod 660 /dev/kvm
+          fi
+      - name: Create and boot emulator
+        run: |
+          set -euxo pipefail
+          echo "no" | avdmanager create avd --force --name moataz_ci --package "system-images;android-35;google_apis;x86_64" --device "pixel_6"
+          nohup "$ANDROID_HOME/emulator/emulator" -avd moataz_ci -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -camera-back none -camera-front none > /tmp/emulator.log 2>&1 &
+          adb wait-for-device
+          timeout 240 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 2; done'
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          adb shell input keyevent 82 || true
+      - name: Install and launch production app
+        run: |
+          set -euxo pipefail
+          adb install -r app/build/outputs/apk/debug/app-debug.apk
+          adb logcat -c
+          adb shell am force-stop com.moatazvid.app || true
+          adb shell am start -W -n com.moatazvid.app/.MainActivity | tee /tmp/am-start.txt
+          sleep 8
+          test -n "$(adb shell pidof com.moatazvid.app | tr -d '\r')"
+          adb shell dumpsys activity activities | grep -E "mResumedActivity|topResumedActivity" | grep "com.moatazvid.app"
+          adb exec-out screencap -p > /tmp/moataz-home.png
+          adb logcat -d > /tmp/logcat.txt
+          if grep -E "FATAL EXCEPTION|Process: com\.moatazvid\.app.*has died|AndroidRuntime.*com\.moatazvid\.app" /tmp/logcat.txt; then
+            echo "Startup/runtime crash detected" >&2
+            exit 1
+          fi
+      - name: Run editor instrumentation tests
+        run: ./gradlew -PincludeAndroidModules=true :editor-ui:connectedDebugAndroidTest
+      - name: Upload runtime diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-runtime-diagnostics
+          path: |
+            /tmp/am-start.txt
+            /tmp/logcat.txt
+            /tmp/emulator.log
+            /tmp/moataz-home.png
+            editor-ui/build/reports/androidTests/
+          if-no-files-found: ignore
+          retention-days: 7
