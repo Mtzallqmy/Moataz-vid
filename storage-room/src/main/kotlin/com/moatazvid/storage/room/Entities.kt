@@ -215,8 +215,8 @@ data class EffectEntity(
     tableName = "transitions",
     foreignKeys = [
         ForeignKey(TrackEntity::class, ["trackId"], ["trackId"], onDelete = ForeignKey.CASCADE),
-        ForeignKey(ClipEntity::class, ["outgoingClipId"], ["clipId"], onDelete = ForeignKey.CASCADE),
-        ForeignKey(ClipEntity::class, ["incomingClipId"], ["clipId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(ClipEntity::class, ["clipId"], ["outgoingClipId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(ClipEntity::class, ["clipId"], ["incomingClipId"], onDelete = ForeignKey.CASCADE),
     ],
     indices = [Index("trackId"), Index("outgoingClipId"), Index("incomingClipId"), Index(value = ["outgoingClipId", "incomingClipId"], unique = true)],
 )
