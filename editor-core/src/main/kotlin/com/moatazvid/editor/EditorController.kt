@@ -40,7 +40,7 @@ class EditorController(
     }
 
     fun setViewportWidth(widthPx: Double) { mutable.update { it.copy(viewport = it.viewport.copy(viewportWidthPx = widthPx.coerceAtLeast(1.0))) }; refreshVisibleMedia() }
-    fun scrollTo(offsetPx: Double) { mutable.update { it.copy(viewport = it.viewport.copy(scrollOffsetPx = offsetPx.coerceAtLeast(0.0))) }; refreshVisibleMedia() }
+    fun scrollTo(offsetPx: Double) { mutable.update { it.copy(viewport = it.viewport.copy(scrollOffsetPx = offsetPx.coerceAtLeast(0.0)) }; refreshVisibleMedia() }
     fun zoom(factor: Double, focalPointPx: Double) { mutable.update { it.copy(viewport = it.viewport.zoomBy(factor, focalPointPx)) }; refreshVisibleMedia() }
     fun selectClip(clipId: ClipId?) = mutable.update { state ->
         val selected = clipId?.let(::setOf) ?: emptySet(); val item = state.displayProject?.snapshot?.items?.firstOrNull { it.id == clipId }
@@ -82,19 +82,62 @@ class EditorController(
     suspend fun redo() { val seq = mutable.value.project?.snapshot?.sequence?.id ?: return; applyManual { manual.redo(seq) } }
 
     fun sendAiMessage(text: String) {
-        val id = projectId ?: return; if (text.isBlank()) return
-        aiJob?.cancel(); val bubble = ChatBubble("user_${System.nanoTime()}", true, text)
-        mutable.update { it.copy(aiChat = it.aiChat.copy(stage = AiChatStage.THINKING, messages = it.aiChat.messages + bubble, statusText = "أفهم طلبك…")) }
+        val id = projectId ?: return
+        if (text == STRATEGY_CONFIRM_COMMAND) { confirmPendingStrategy(); return }
+        if (text == STRATEGY_REJECT_COMMAND) { rejectPendingStrategy(); return }
+        if (text.isBlank()) return
+        aiJob?.cancel()
+        val bubble = ChatBubble("user_${System.nanoTime()}", true, text)
+        mutable.update { it.copy(
+            pendingStrategy = null,
+            aiChat = it.aiChat.copy(stage = AiChatStage.THINKING, messages = it.aiChat.messages + bubble, statusText = "أفهم طلبك…"),
+        ) }
         aiJob = scope.launch {
             val result = ai.analyzeMessage(id, text, mutable.value.pendingPlan) { progress -> mutable.update { it.copy(aiChat = it.aiChat.copy(stage = progress.stage.toUi(), statusText = progress.userVisibleStatus)) } }
             handleAiResult(result)
         }
     }
+
+    private fun confirmPendingStrategy() {
+        val strategy = mutable.value.pendingStrategy ?: return
+        aiJob?.cancel()
+        mutable.update { it.copy(aiChat = it.aiChat.copy(stage = AiChatStage.BUILDING_PLAN, statusText = "تم اعتماد الاستراتيجية. أبني الخطة الآمنة…")) }
+        aiJob = scope.launch {
+            val result = ai.confirmStrategy(strategy) { progress ->
+                mutable.update { it.copy(aiChat = it.aiChat.copy(stage = progress.stage.toUi(), statusText = progress.userVisibleStatus)) }
+            }
+            when (result) {
+                is AiEditorResult.PlanReady -> mutable.update { it.copy(
+                    pendingStrategy = null,
+                    pendingPlan = result.pending,
+                    previewingPending = false,
+                    aiChat = it.aiChat.copy(stage = AiChatStage.PLAN_READY, statusText = "الخطة جاهزة للمعاينة"),
+                ) }
+                is AiEditorResult.Failure -> {
+                    if (result.messageKey == "strategy.stale") mutable.update { it.copy(pendingStrategy = null) }
+                    handleAiResult(result)
+                }
+                else -> handleAiResult(result)
+            }
+        }
+    }
+
+    private fun rejectPendingStrategy() {
+        mutable.update { it.copy(
+            pendingStrategy = null,
+            aiChat = it.aiChat.copy(
+                stage = AiChatStage.IDLE,
+                statusText = null,
+                messages = it.aiChat.messages + ChatBubble("ai_${System.nanoTime()}", false, "تم رفض الاستراتيجية. لم يتغير المشروع."),
+            ),
+        ) }
+    }
+
     fun cancelAiRequest() { aiJob?.cancel(); mutable.update { it.copy(aiChat = it.aiChat.copy(stage = AiChatStage.CANCELLED, statusText = "أُلغي الطلب")) } }
     suspend fun applyPending() {
         val pending = mutable.value.pendingPlan ?: return; mutable.update { it.copy(aiChat = it.aiChat.copy(stage = AiChatStage.APPLYING, statusText = "أطبق التعديلات…")) }
         when (val result = ai.applyPendingEdit(pending.id)) {
-            is AiEditorResult.Applied -> mutable.update { it.copy(project = result.result.project, pendingPlan = null, previewingPending = false, canUndo = true,
+            is AiEditorResult.Applied -> mutable.update { it.copy(project = result.result.project, pendingStrategy = null, pendingPlan = null, previewingPending = false, canUndo = true,
                 aiChat = it.aiChat.copy(stage = AiChatStage.DONE, statusText = "تم تطبيق ${pending.editPlan.operations.size} تعديلًا")) }
             is AiEditorResult.Failure -> addError(result.messageKey, "تعذر تطبيق الخطة")
             else -> Unit
@@ -134,15 +177,22 @@ class EditorController(
     private suspend fun applyManual(block: suspend () -> ManualEditResult) {
         when (val result = block()) {
             is ManualEditResult.Success -> mutable.update { state -> state.copy(project = result.commit.project, canUndo = true, canRedo = true,
+                pendingStrategy = state.pendingStrategy?.takeIf { it.baseRevision == result.commit.project.revision },
                 pendingPlan = state.pendingPlan?.let { if (it.baseRevision != result.commit.project.revision) it.copy(status = PendingEditStatus.STALE) else it }, previewingPending = false, autosave = AutosaveState.SAVED) }
             is ManualEditResult.Failure -> addError("manual.edit_failed", result.message)
         }
     }
     private fun handleAiResult(result: AiEditorResult) = when (result) {
-        is AiEditorResult.PlanReady -> mutable.update { it.copy(pendingPlan = result.pending, aiChat = it.aiChat.copy(stage = AiChatStage.PLAN_READY, statusText = "الخطة جاهزة")) }
+        is AiEditorResult.StrategyReady -> mutable.update { it.copy(
+            pendingStrategy = result.strategy,
+            pendingPlan = null,
+            previewingPending = false,
+            aiChat = it.aiChat.copy(stage = AiChatStage.STRATEGY_READY, statusText = "اعتمد الاستراتيجية قبل إنشاء الخطة"),
+        ) }
+        is AiEditorResult.PlanReady -> mutable.update { it.copy(pendingStrategy = null, pendingPlan = result.pending, aiChat = it.aiChat.copy(stage = AiChatStage.PLAN_READY, statusText = "الخطة جاهزة")) }
         is AiEditorResult.Analysis -> mutable.update { it.copy(aiChat = it.aiChat.copy(stage = AiChatStage.DONE, statusText = null, messages = it.aiChat.messages + ChatBubble("ai_${System.nanoTime()}", false, result.text))) }
         is AiEditorResult.ConstraintSaved -> mutable.update { it.copy(aiChat = it.aiChat.copy(stage = AiChatStage.DONE, messages = it.aiChat.messages + ChatBubble("ai_${System.nanoTime()}", false, "حفظت القيد: ${result.constraint.text}"))) }
-        is AiEditorResult.HistoryChanged -> mutable.update { it.copy(project = result.result.project, aiChat = it.aiChat.copy(stage = AiChatStage.DONE, statusText = if (result.undo) "تم التراجع" else "تمت الإعادة")) }
+        is AiEditorResult.HistoryChanged -> mutable.update { it.copy(project = result.result.project, pendingStrategy = null, aiChat = it.aiChat.copy(stage = AiChatStage.DONE, statusText = if (result.undo) "تم التراجع" else "تمت الإعادة")) }
         is AiEditorResult.Clarification -> mutable.update { it.copy(aiChat = it.aiChat.copy(stage = AiChatStage.DONE, messages = it.aiChat.messages + ChatBubble("ai_${System.nanoTime()}", false, result.question))) }
         is AiEditorResult.Failure -> { if (result.messageKey.contains("provider")) mutable.update { it.copy(aiChat = it.aiChat.copy(stage = AiChatStage.ERROR, providerMissing = true)) }; addError(result.messageKey, result.detail ?: "تعذر إكمال الطلب") }
         AiEditorResult.Cancelled -> mutable.update { it.copy(aiChat = it.aiChat.copy(stage = AiChatStage.CANCELLED)) }
@@ -165,5 +215,23 @@ class EditorController(
         }
     }
     private fun TimelineItem.inspectorKind() = when (type) { TimelineItemType.VIDEO -> InspectorKind.VIDEO; TimelineItemType.AUDIO, TimelineItemType.MUSIC -> InspectorKind.AUDIO; TimelineItemType.TEXT, TimelineItemType.IMAGE -> InspectorKind.TEXT }
-    private fun AiEditorStage.toUi() = when (this) { AiEditorStage.IDLE -> AiChatStage.IDLE; AiEditorStage.CLASSIFYING, AiEditorStage.BUILDING_CONTEXT -> AiChatStage.THINKING; AiEditorStage.USING_TOOLS -> AiChatStage.USING_TOOLS; AiEditorStage.BUILDING_PLAN, AiEditorStage.REPAIRING_PLAN -> AiChatStage.BUILDING_PLAN; AiEditorStage.SIMULATING -> AiChatStage.SIMULATING; AiEditorStage.PLAN_READY -> AiChatStage.PLAN_READY; AiEditorStage.APPLYING -> AiChatStage.APPLYING; AiEditorStage.DONE -> AiChatStage.DONE; AiEditorStage.ERROR -> AiChatStage.ERROR; AiEditorStage.CANCELLED -> AiChatStage.CANCELLED }
+    private fun AiEditorStage.toUi() = when (this) {
+        AiEditorStage.IDLE -> AiChatStage.IDLE
+        AiEditorStage.CLASSIFYING, AiEditorStage.BUILDING_CONTEXT -> AiChatStage.THINKING
+        AiEditorStage.BUILDING_STRATEGY -> AiChatStage.BUILDING_STRATEGY
+        AiEditorStage.STRATEGY_READY -> AiChatStage.STRATEGY_READY
+        AiEditorStage.USING_TOOLS -> AiChatStage.USING_TOOLS
+        AiEditorStage.BUILDING_PLAN, AiEditorStage.REPAIRING_PLAN -> AiChatStage.BUILDING_PLAN
+        AiEditorStage.SIMULATING -> AiChatStage.SIMULATING
+        AiEditorStage.PLAN_READY -> AiChatStage.PLAN_READY
+        AiEditorStage.APPLYING -> AiChatStage.APPLYING
+        AiEditorStage.DONE -> AiChatStage.DONE
+        AiEditorStage.ERROR -> AiChatStage.ERROR
+        AiEditorStage.CANCELLED -> AiChatStage.CANCELLED
+    }
+
+    companion object {
+        const val STRATEGY_CONFIRM_COMMAND = "__confirm_video_use_strategy__"
+        const val STRATEGY_REJECT_COMMAND = "__reject_video_use_strategy__"
+    }
 }
