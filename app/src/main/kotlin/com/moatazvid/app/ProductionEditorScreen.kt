@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.moatazvid.ai.editor.AiContextBuilder
@@ -43,13 +44,23 @@ fun ProductionEditorScreen(
     val persistence = remember(projectId.value) { SharedPreferencesEditorStatePersistence(context) }
     val aiData = remember(projectId.value) { ProductionAiDataSource(repository) }
     val ai = remember(projectId.value) {
-        AiEditorEngine(
-            data = aiData,
-            store = store,
-            contextBuilder = AiContextBuilder(aiData),
-            modelResolver = UnconfiguredEditingModelResolver,
-            proposalClient = UnconfiguredEditPlanClient,
-        )
+        try {
+            AiEditorEngine(
+                data = aiData,
+                store = store,
+                contextBuilder = AiContextBuilder(aiData),
+                modelResolver = UnconfiguredEditingModelResolver,
+                proposalClient = UnconfiguredEditPlanClient,
+            )
+        } catch (_: Throwable) {
+            AiEditorEngine(
+                data = aiData,
+                store = store,
+                contextBuilder = AiContextBuilder(aiData),
+                modelResolver = UnconfiguredEditingModelResolver,
+                proposalClient = UnconfiguredEditPlanClient,
+            )
+        }
     }
     val manual = remember(projectId.value) { ManualEditService(store) }
     val controller = remember(projectId.value) {
@@ -133,6 +144,17 @@ fun ProductionEditorScreen(
                 Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
                     Text(message, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onSecondaryContainer)
                 }
+            }
+            Surface(
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = stringResource(R.string.ai_unconfigured_banner),
+                    modifier = Modifier.padding(12.dp),
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 MoatazProjectEditor(viewModel) {
