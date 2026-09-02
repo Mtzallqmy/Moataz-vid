@@ -31,6 +31,7 @@ class ProductionVideoExporter(
     private val outputTargets = AndroidAtomicOutputTargetFactory(appContext)
     private val verifier = OutputVerifier(AndroidOutputInspector(appContext))
     private val selfEvaluator = AndroidVideoUseSelfEvaluator(appContext)
+    private val sessionMemory = ProductionVideoUseSessionMemory(repository)
 
     suspend fun export(
         projectId: ProjectId,
@@ -63,8 +64,8 @@ class ProductionVideoExporter(
             "No compatible H.264 encoder for ${settings.width}x${settings.height}@${settings.frameRate.asDouble()}"
         }
 
-        // One final lossy Media3 Transformer pass. All correctness policy is applied to this single
-        // composition rather than producing intermediate re-encoded media.
+        // Exactly one final lossy Media3 Transformer pass. The preview and exporter share the same
+        // normalized composition so what the user approves is what the encoder receives.
         val composition = VideoUseMedia3Policy.normalize(compositionMapper.map(graph, preferProxy = false))
         val preflight = VideoUseMedia3Policy.inspect(composition)
         check(preflight.passed) { "Render preflight failed: ${preflight.issues.joinToString()}" }
@@ -112,6 +113,7 @@ class ProductionVideoExporter(
         }
 
         check(target.commit()) { "Could not publish the verified export" }
+        sessionMemory.recordSelfEvaluation(projectId, selfEvaluation)
         Completed(target.publishedUri ?: destination.toString(), verification, selfEvaluation)
     }
 
