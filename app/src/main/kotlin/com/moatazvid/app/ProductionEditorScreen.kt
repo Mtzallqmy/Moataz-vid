@@ -16,6 +16,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.moatazvid.ai.editor.AiContextBuilder
 import com.moatazvid.ai.editor.AiEditorEngine
 import com.moatazvid.core.ProjectId
+import com.moatazvid.editor.AiChatStage
 import com.moatazvid.editor.EditorController
 import com.moatazvid.editor.ManualEditService
 import com.moatazvid.editor.ui.EditorViewModel
@@ -44,6 +45,7 @@ fun ProductionEditorScreen(
     val gateway = remember(projectId.value) { ProductionSpeechEditorGateway(repository, speechRuntime) }
     val player = remember(projectId.value) { ProductionEditorPlayer(context, repository, surfaceView, runtimeScope) }
     val persistence = remember(projectId.value) { SharedPreferencesEditorStatePersistence(context) }
+    val sessionMemory = remember(projectId.value) { ProductionVideoUseSessionMemory(repository) }
     val aiData = remember(projectId.value) {
         VideoUseProductionAiDataSource(ProductionSpeechAiDataSource(repository, speechRuntime))
     }
@@ -68,15 +70,56 @@ fun ProductionEditorScreen(
         )
     }
     val viewModel = remember(projectId.value) { EditorViewModel(controller) }
+    val editorState by viewModel.state.collectAsState()
     val exporter = remember(projectId.value) { ProductionVideoExporter(context, repository) }
+
     var exporting by remember { mutableStateOf(false) }
     var exportPercent by remember { mutableStateOf<Double?>(null) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
     var projectTitle by remember { mutableStateOf("Moataz-vid") }
+    var activeSessionId by remember(projectId.value) { mutableStateOf<String?>(null) }
+    var activeSessionHadPlan by remember(projectId.value) { mutableStateOf(false) }
 
     LaunchedEffect(projectId.value) {
         repository.loadEditableProject(projectId)?.let { projectTitle = it.snapshot.project.title }
         viewModel.open(projectId)
+    }
+
+    // Persist the strategy before approval, mirroring video-use's explicit strategy gate and
+    // project.md-style memory instead of leaving important AI decisions only in volatile UI state.
+    LaunchedEffect(editorState.pendingStrategy?.id) {
+        editorState.pendingStrategy?.let { strategy ->
+            activeSessionId = strategy.id
+            activeSessionHadPlan = false
+            sessionMemory.strategyReady(strategy)
+        }
+    }
+
+    LaunchedEffect(editorState.pendingPlan?.id?.value) {
+        val pending = editorState.pendingPlan ?: return@LaunchedEffect
+        val sessionId = activeSessionId ?: return@LaunchedEffect
+        sessionMemory.strategyConfirmed(sessionId)
+        sessionMemory.planReady(sessionId, pending)
+        activeSessionHadPlan = true
+    }
+
+    LaunchedEffect(
+        editorState.pendingStrategy?.id,
+        editorState.pendingPlan?.id?.value,
+        editorState.aiChat.stage,
+        editorState.project?.revision,
+    ) {
+        val sessionId = activeSessionId ?: return@LaunchedEffect
+        when {
+            activeSessionHadPlan && editorState.pendingPlan == null && editorState.aiChat.stage == AiChatStage.DONE -> {
+                editorState.project?.let { sessionMemory.applied(sessionId, it.revision) }
+                activeSessionHadPlan = false
+            }
+            !activeSessionHadPlan && editorState.pendingStrategy == null && editorState.aiChat.stage == AiChatStage.IDLE -> {
+                sessionMemory.strategyRejected(sessionId)
+                activeSessionId = null
+            }
+        }
     }
 
     DisposableEffect(projectId.value) {
