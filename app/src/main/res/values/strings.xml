@@ -5,7 +5,7 @@
     <string name="new_project">New project</string>
     <string name="import_video">Import video</string>
     <string name="recent_projects">Recent projects</string>
-    <string name="empty_projects">No projects yet. Create a project or import a video to start editing.</string>
+    <string name="empty_projects">A local video editor on this device. Create a project or import a video to begin.</string>
     <string name="settings">Settings</string>
     <string name="about">About</string>
     <string name="privacy">Privacy</string>
@@ -36,4 +36,7 @@
     <string name="import_failed">Could not import this media.</string>
     <string name="permission_lost">Access to the source was lost. Reselect the original file.</string>
     <string name="manual_mode_available">Manual editing works without an AI provider.</string>
+    <string name="startup_failed">Could not start the app</string>
+    <string name="retry">Retry</string>
+    <string name="ai_unconfigured_banner">Cloud AI is not configured. Manual editing works locally.</string>
 </resources>

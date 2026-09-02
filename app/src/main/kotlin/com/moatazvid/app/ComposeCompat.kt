@@ -1,7 +1,4 @@
 package com.moatazvid.app
 
-import androidx.compose.runtime.Composable
-
-/** Keeps production root independent from wildcard foundation imports. */
-@Composable
-fun isSystemInDarkTheme(): Boolean = androidx.compose.foundation.isSystemInDarkTheme()
+/** Dark-theme detection uses the Compose foundation import at each call site. */
+internal object ComposeCompat

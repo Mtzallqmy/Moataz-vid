@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -162,7 +163,16 @@ private fun ProductionHomeScreen(
             item { Text(stringResource(R.string.recent_projects), style = MaterialTheme.typography.titleMedium) }
             if (projects.isEmpty()) {
                 item {
-                    ElevatedCard(Modifier.fillMaxWidth()) { Text(stringResource(R.string.empty_projects), Modifier.padding(20.dp)) }
+                    ElevatedCard(Modifier.fillMaxWidth()) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge)
+                            Text(stringResource(R.string.empty_projects), style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
                 }
             } else {
                 items(projects, key = { it.id.value }) { project ->

@@ -6,8 +6,23 @@ import android.app.NotificationManager
 import android.os.Build
 
 class MoatazVidApplication : Application() {
-    val projects: ProductionProjectRepository by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        ProductionProjectRepository.create(this)
+    @Volatile
+    private var cachedRepository: Result<ProductionProjectRepository>? = null
+
+    /** Nullable so a Room/native failure can be shown in Compose instead of crashing cold start. */
+    val projects: ProductionProjectRepository?
+        get() = repositoryResult().getOrNull()
+
+    @Synchronized
+    fun repositoryResult(): Result<ProductionProjectRepository> {
+        cachedRepository?.let { return it }
+        return runCatching { ProductionProjectRepository.create(this) }.also { cachedRepository = it }
+    }
+
+    @Synchronized
+    fun retryRepository(): Result<ProductionProjectRepository> {
+        cachedRepository = null
+        return repositoryResult()
     }
 
     override fun onCreate() {

@@ -6,7 +6,7 @@ class UserPreferences(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("user_preferences", Context.MODE_PRIVATE)
 
     var language: String
-        get() = prefs.getString(KEY_LANGUAGE, LANGUAGE_SYSTEM) ?: LANGUAGE_SYSTEM
+        get() = prefs.getString(KEY_LANGUAGE, LANGUAGE_ARABIC) ?: LANGUAGE_ARABIC
         set(value) {
             require(value in setOf(LANGUAGE_SYSTEM, LANGUAGE_ARABIC, LANGUAGE_ENGLISH))
             prefs.edit().putString(KEY_LANGUAGE, value).apply()
