@@ -3,9 +3,14 @@ name: Core CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   core-tests:
@@ -35,12 +40,16 @@ jobs:
           passed = totals['tests'] - totals['failures'] - totals['errors'] - totals['skipped']
           line = f"Unit tests: total={totals['tests']} passed={passed} failed={totals['failures'] + totals['errors']} skipped={totals['skipped']}"
           print(line)
-          with open('/tmp/unit-test-summary.txt', 'w') as f: f.write(line + '\n')
           with open(__import__('os').environ['GITHUB_STEP_SUMMARY'], 'a') as f: f.write('### ' + line + '\n')
           PY
 
   android-production-build:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_KEYSTORE_B64: ${{ secrets.MOATAZ_RELEASE_KEYSTORE_BASE64 }}
+      RELEASE_KEY_ALIAS: ${{ secrets.MOATAZ_RELEASE_KEY_ALIAS }}
+      RELEASE_STORE_PASSWORD: ${{ secrets.MOATAZ_RELEASE_STORE_PASSWORD }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.MOATAZ_RELEASE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,28 +62,147 @@ jobs:
       - name: Install Android toolchain
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Compile editor instrumentation sources
-        run: ./gradlew -PincludeAndroidModules=true :editor-ui:compileDebugAndroidTestKotlin
-      - name: Build production application
+      - name: Run Android unit and compile checks
+        run: ./gradlew -PincludeAndroidModules=true :storage-room:testDebugUnitTest :editor-ui:compileDebugAndroidTestKotlin
+      - name: Build ARM64 Android 8+ application
         run: ./gradlew -PincludeAndroidModules=true :app:assembleDebug :app:assembleRelease :app:lintDebug
-      - name: Prepare ARM64 APK artifacts
+      - name: Prepare and verify ARM64 APK artifacts
         run: |
           set -euxo pipefail
           mkdir -p release-artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/Moataz-vid-1.0.0-arm64-debug.apk
-          if [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
-            cp app/build/outputs/apk/release/app-release-unsigned.apk release-artifacts/Moataz-vid-1.0.0-arm64-release-unsigned.apk
-          elif [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            cp app/build/outputs/apk/release/app-release.apk release-artifacts/Moataz-vid-1.0.0-arm64-release.apk
+          DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
+          RELEASE_UNSIGNED="app/build/outputs/apk/release/app-release-unsigned.apk"
+          RELEASE_DIRECT="app/build/outputs/apk/release/app-release.apk"
+          AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
+          ZIPALIGN="$ANDROID_HOME/build-tools/36.0.0/zipalign"
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+
+          test -x "$AAPT"
+          test -x "$ZIPALIGN"
+          test -x "$APKSIGNER"
+          test -f "$DEBUG_APK"
+          cp "$DEBUG_APK" release-artifacts/Moataz-vid-1.0.1-android8plus-arm64-debug.apk
+
+          if [ -f "$RELEASE_UNSIGNED" ]; then
+            cp "$RELEASE_UNSIGNED" release-artifacts/Moataz-vid-1.0.1-android8plus-arm64-release-unsigned.apk
+          elif [ -f "$RELEASE_DIRECT" ]; then
+            cp "$RELEASE_DIRECT" release-artifacts/Moataz-vid-1.0.1-android8plus-arm64-release.apk
           fi
-          sha256sum release-artifacts/*.apk | tee release-artifacts/SHA256SUMS.txt
+
+          if [ -d storage-room/schemas ]; then
+            mkdir -p release-artifacts/room-schemas
+            cp -R storage-room/schemas/. release-artifacts/room-schemas/
+          fi
+
           for apk in release-artifacts/*.apk; do
             echo "### $(basename "$apk")" >> "$GITHUB_STEP_SUMMARY"
-            aapt dump badging "$apk" | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)" >> "$GITHUB_STEP_SUMMARY" || true
-            unzip -l "$apk" | grep 'lib/arm64-v8a/.*\.so' | head -30 >> "$GITHUB_STEP_SUMMARY" || true
+            "$AAPT" dump badging "$apk" | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)" | tee -a "$GITHUB_STEP_SUMMARY"
+            "$ZIPALIGN" -c 4 "$apk"
+            if unzip -l "$apk" | grep -q 'lib/x86_64/'; then
+              echo "Unexpected x86_64 native library in production artifact: $apk" >&2
+              exit 1
+            fi
+            if ! "$AAPT" dump badging "$apk" | grep -q "sdkVersion:'26'"; then
+              echo "APK does not declare Android 8.0 / API 26 minimum: $apk" >&2
+              exit 1
+            fi
+            if ! "$AAPT" dump badging "$apk" | grep -q "native-code: 'arm64-v8a'"; then
+              echo "APK is not ARM64-only: $apk" >&2
+              exit 1
+            fi
           done
+
+          "$APKSIGNER" verify --verbose release-artifacts/Moataz-vid-1.0.1-android8plus-arm64-debug.apk
+          sha256sum release-artifacts/*.apk | tee release-artifacts/SHA256SUMS.txt
+      - name: Sign release APK when production signing secrets are configured
+        if: ${{ env.RELEASE_KEYSTORE_B64 != '' && env.RELEASE_KEY_ALIAS != '' && env.RELEASE_STORE_PASSWORD != '' && env.RELEASE_KEY_PASSWORD != '' }}
+        run: |
+          set -euxo pipefail
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          UNSIGNED="release-artifacts/Moataz-vid-1.0.1-android8plus-arm64-release-unsigned.apk"
+          SIGNED="release-artifacts/Moataz-vid-1.0.1-android8plus-arm64-release-signed.apk"
+          test -f "$UNSIGNED"
+          printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > /tmp/moataz-release.jks
+          "$APKSIGNER" sign \
+            --ks /tmp/moataz-release.jks \
+            --ks-key-alias "$RELEASE_KEY_ALIAS" \
+            --ks-pass "pass:$RELEASE_STORE_PASSWORD" \
+            --key-pass "pass:$RELEASE_KEY_PASSWORD" \
+            --out "$SIGNED" \
+            "$UNSIGNED"
+          "$APKSIGNER" verify --verbose --print-certs "$SIGNED" | tee -a "$GITHUB_STEP_SUMMARY"
+          rm -f /tmp/moataz-release.jks
+          sha256sum release-artifacts/*.apk | tee release-artifacts/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: moataz-vid-arm64-apks
+          name: moataz-vid-1.0.1-android8plus-arm64
           path: release-artifacts/
           if-no-files-found: error
+          retention-days: 30
+
+  android-api26-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install API 26 emulator and build toolchain
+        run: sdkmanager "platform-tools" "emulator" "platforms;android-36" "build-tools;36.0.0" "system-images;android-26;google_apis;x86_64" "ndk;27.0.12077973" "cmake;3.22.1"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build emulator smoke APK
+        run: ./gradlew -PincludeAndroidModules=true -PincludeEmulatorAbi=true :app:assembleDebug
+      - name: Boot Android 8.0 emulator
+        run: |
+          set -euxo pipefail
+          sudo chmod 666 /dev/kvm || true
+          echo no | avdmanager create avd --force --name moataz-api26 --package "system-images;android-26;google_apis;x86_64"
+          "$ANDROID_HOME/emulator/emulator" \
+            -avd moataz-api26 \
+            -no-window -noaudio -no-boot-anim -no-snapshot -wipe-data \
+            -gpu swiftshader_indirect > /tmp/emulator.log 2>&1 &
+          adb wait-for-device
+          timeout 360 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 5; done'
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+      - name: Launch and verify cold start on Android 8.0
+        run: |
+          set -euxo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          adb install -r "$APK"
+          adb logcat -c
+          adb shell am force-stop com.moatazvid.app
+          adb shell am start -W -n com.moatazvid.app/.MainActivity | tee /tmp/activity-start.txt
+          sleep 12
+          PID="$(adb shell pidof com.moatazvid.app | tr -d '\r')"
+          test -n "$PID"
+          adb shell uiautomator dump /sdcard/moataz-window.xml || true
+          adb shell cat /sdcard/moataz-window.xml > /tmp/moataz-window.xml || true
+          adb logcat -d > /tmp/logcat.txt
+          if grep -A20 -B3 "FATAL EXCEPTION" /tmp/logcat.txt | grep -q "com.moatazvid.app"; then
+            echo "Moataz vid crashed during API 26 cold-start smoke test" >&2
+            exit 1
+          fi
+          if ! grep -Eq "Moataz vid|معتز فيد|Projects|المشاريع" /tmp/moataz-window.xml; then
+            echo "Expected home UI was not visible after cold start" >&2
+            cat /tmp/moataz-window.xml >&2 || true
+            exit 1
+          fi
+      - name: Upload API 26 smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-api26-smoke-diagnostics
+          path: |
+            /tmp/emulator.log
+            /tmp/activity-start.txt
+            /tmp/logcat.txt
+            /tmp/moataz-window.xml
+          if-no-files-found: ignore
+          retention-days: 7
