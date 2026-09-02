@@ -77,7 +77,13 @@ class Media3RuntimeCompositionFactory(
             // Media3's FrameDropEffect accepts float targets, so NTSC rationals such as 30000/1001
             // do not need to be rounded to integer fps. It only drops; it never invents frames.
             add(FrameDropEffect.createDefaultFrameDropEffect(spec.canvas.frameRate.asDouble().toFloat()))
-            spec.overlays.sortedBy { it.startUs }.forEach { overlay -> buildTimedOverlay(overlay)?.let(::add) }
+            // video-use hard rule: subtitles/captions are always composited after every other overlay.
+            spec.overlays.sortedWith(
+                compareBy<Media3OverlaySpec> { it.kind == Media3OverlayKind.CAPTION }
+                    .thenBy { it.startUs }
+                    .thenBy { it.endUs }
+                    .thenBy { it.id }
+            ).forEach { overlay -> buildTimedOverlay(overlay)?.let(::add) }
         }
         val builder = Composition.Builder(sequences)
             .setHdrMode(
