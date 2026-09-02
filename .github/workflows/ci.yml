@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -39,7 +39,7 @@ jobs:
           with open(__import__('os').environ['GITHUB_STEP_SUMMARY'], 'a') as f: f.write('### ' + line + '\n')
           PY
 
-  android-editor-build:
+  android-production-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +50,31 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
-      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install Android toolchain
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Compile Android editor and instrumentation sources
-        run: ./gradlew -PincludeAndroidModules=true :editor-ui:assembleDebug :editor-ui:compileDebugAndroidTestKotlin
+      - name: Compile editor instrumentation sources
+        run: ./gradlew -PincludeAndroidModules=true :editor-ui:compileDebugAndroidTestKotlin
+      - name: Build production application
+        run: ./gradlew -PincludeAndroidModules=true :app:assembleDebug :app:assembleRelease :app:lintDebug
+      - name: Prepare ARM64 APK artifacts
+        run: |
+          set -euxo pipefail
+          mkdir -p release-artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/Moataz-vid-1.0.0-arm64-debug.apk
+          if [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk release-artifacts/Moataz-vid-1.0.0-arm64-release-unsigned.apk
+          elif [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk release-artifacts/Moataz-vid-1.0.0-arm64-release.apk
+          fi
+          sha256sum release-artifacts/*.apk | tee release-artifacts/SHA256SUMS.txt
+          for apk in release-artifacts/*.apk; do
+            echo "### $(basename "$apk")" >> "$GITHUB_STEP_SUMMARY"
+            aapt dump badging "$apk" | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)" >> "$GITHUB_STEP_SUMMARY" || true
+            unzip -l "$apk" | grep 'lib/arm64-v8a/.*\.so' | head -30 >> "$GITHUB_STEP_SUMMARY" || true
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moataz-vid-arm64-apks
+          path: release-artifacts/
+          if-no-files-found: error

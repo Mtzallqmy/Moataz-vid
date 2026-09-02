@@ -47,6 +47,26 @@ class AndroidCompositionPlayerFacade(
         player.seekTo(position.value / 1_000L)
     }
 
+    override suspend fun play(sessionId: String): Unit = withContext(Dispatchers.Main.immediate) {
+        requireNotNull(sessions[sessionId]) { "Unknown preview session $sessionId" }.play()
+    }
+
+    override suspend fun pause(sessionId: String): Unit = withContext(Dispatchers.Main.immediate) {
+        requireNotNull(sessions[sessionId]) { "Unknown preview session $sessionId" }.pause()
+    }
+
+    override suspend fun setMuted(sessionId: String, muted: Boolean): Unit = withContext(Dispatchers.Main.immediate) {
+        requireNotNull(sessions[sessionId]) { "Unknown preview session $sessionId" }.volume = if (muted) 0f else 1f
+    }
+
+    override suspend fun currentPosition(sessionId: String): TimeUs = withContext(Dispatchers.Main.immediate) {
+        TimeUs(requireNotNull(sessions[sessionId]) { "Unknown preview session $sessionId" }.currentPosition.coerceAtLeast(0L) * 1_000L)
+    }
+
+    override suspend fun isPlaying(sessionId: String): Boolean = withContext(Dispatchers.Main.immediate) {
+        requireNotNull(sessions[sessionId]) { "Unknown preview session $sessionId" }.isPlaying
+    }
+
     override suspend fun release(sessionId: String): Unit = withContext(Dispatchers.Main.immediate) {
         sessions.remove(sessionId)?.release()
         Unit

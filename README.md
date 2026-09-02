@@ -3,7 +3,7 @@
 محرر فيديو ذكي يعمل محليًا على Android، يحوّل أوامر المستخدم الطبيعية إلى خطط تعديل منظمة وآمنة وقابلة للمعاينة والتراجع.
 
 **المالك والمطور:** معتز العلقمي — تعز، اليمن  
-**الحالة الحالية:** اكتمال الأساس المعماري والتخزين والوسائط والكلام المحلي وبنية مزوّدي LLM، قبل Chat Editing والواجهات.
+**الحالة الحالية:** المرحلتان 8 و9 (الإنتاج الإبداعي والتصدير) والمرحلة 10 (تطبيق Android الإنتاجي `:app`) منفّذة. CI يبني `assembleDebug` و`assembleRelease` عند تفعيل `-PincludeAndroidModules=true`.
 
 ## المبدأ المعماري
 
@@ -47,7 +47,9 @@ User Request
 - [x] المرحلة الخامسة: Unified AI Provider System foundation.
 - [x] المرحلة السادسة: Chat Editing وContext وEditPlan validation/simulation/apply.
 - [x] المرحلة السابعة: Editor UI وTimeline يدوي وتجربة AI pending plans.
-- [ ] المرحلتان الثامنة والتاسعة (لا تبدأان دون طلب صريح).
+- [x] المرحلة الثامنة: الإنتاج الإبداعي (captions، overlays، transitions، audio automation) على Media3.
+- [x] المرحلة التاسعة: التصدير والـproxies وقدرات الـcodec وWorkManager ومسارات الإخراج المحققة.
+- [x] المرحلة العاشرة: تطبيق Android الإنتاجي (`:app`) مع شاشة التحرير والتخزين والتصدير؛ `assembleDebug` / `assembleRelease` / `lintDebug`.
 
 ## الحقوق
 

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Moataz vid</string>
+    <string name="home_title">المشاريع</string>
+    <string name="new_project">مشروع جديد</string>
+    <string name="import_video">استيراد فيديو</string>
+    <string name="recent_projects">المشاريع الأخيرة</string>
+    <string name="empty_projects">لا توجد مشاريع بعد. أنشئ مشروعًا أو استورد فيديو لبدء التحرير.</string>
+    <string name="settings">الإعدادات</string>
+    <string name="about">حول التطبيق</string>
+    <string name="privacy">الخصوصية</string>
+    <string name="licenses">تراخيص المصادر المفتوحة</string>
+    <string name="version_label">الإصدار %1$s</string>
+    <string name="developed_by">تطوير معتز العلقمي</string>
+    <string name="location">تعز، اليمن</string>
+    <string name="copyright">حقوق النشر © 2026 معتز العلقمي. جميع الحقوق محفوظة.</string>
+    <string name="local_first">تحرير الفيديو والتفريغ المحلي يعملان محليًا افتراضيًا. الذكاء الاصطناعي السحابي اختياري ويضبطه المستخدم.</string>
+    <string name="language">اللغة</string>
+    <string name="language_system">لغة النظام</string>
+    <string name="language_arabic">العربية</string>
+    <string name="language_english">English</string>
+    <string name="performance">وضع الأداء</string>
+    <string name="ai_providers">مزودو الذكاء الاصطناعي</string>
+    <string name="local_speech">Whisper المحلي</string>
+    <string name="storage">التخزين</string>
+    <string name="export">تصدير</string>
+    <string name="back">رجوع</string>
+    <string name="delete">حذف</string>
+    <string name="rename">إعادة تسمية</string>
+    <string name="cancel">إلغاء</string>
+    <string name="save">حفظ</string>
+    <string name="open">فتح</string>
+    <string name="project_name">اسم المشروع</string>
+    <string name="untitled_project">مشروع بدون اسم</string>
+    <string name="created_project">تم إنشاء المشروع</string>
+    <string name="import_failed">تعذر استيراد هذا الملف.</string>
+    <string name="permission_lost">فُقد إذن الوصول إلى المصدر. أعد اختيار الملف الأصلي.</string>
+    <string name="manual_mode_available">التحرير اليدوي يعمل بدون إعداد مزود ذكاء اصطناعي.</string>
+</resources>
