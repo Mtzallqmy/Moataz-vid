@@ -81,7 +81,7 @@ class VideoUsePackedTranscriptBuilder(
                 sourceId = bucket.first().sourceId,
                 range = TimeRangeUs(bucket.first().sourceRange.start, bucket.last().sourceRange.endExclusive),
                 speakerId = bucket.firstNotNullOfOrNull { it.speakerId },
-                text = render(bucket),
+                text = renderWords(bucket),
                 wordIds = bucket.map { it.id },
             )
             bucket = mutableListOf()
@@ -108,7 +108,7 @@ class VideoUsePackedTranscriptBuilder(
         "[${"%06.2f".format(start)}-${"%06.2f".format(end)}]$speaker ${phrase.text}"
     }
 
-    private fun render(words: List<TranscriptWord>): String = buildString {
+    private fun renderWords(words: List<TranscriptWord>): String = buildString {
         words.forEach { word ->
             val punctuation = word.type == TranscriptWordType.PUNCTUATION
             if (isNotEmpty() && !punctuation) append(' ')
