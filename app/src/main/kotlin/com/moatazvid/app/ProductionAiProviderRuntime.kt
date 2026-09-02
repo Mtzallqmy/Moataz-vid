@@ -162,8 +162,9 @@ private class ProductionEditingModelResolver(
     }
 
     private fun ModelDescriptor.satisfies(requirements: TaskRequirements): Boolean {
+        val modelContextLength = contextLength
         val capabilities = capabilities.values
-        return (contextLength == null || contextLength >= requirements.minimumContext) &&
+        return (modelContextLength == null || modelContextLength >= requirements.minimumContext) &&
             (!requirements.needsTools || capabilities.tools == TriState.YES) &&
             (!requirements.needsStructured || capabilities.structuredOutput == TriState.YES || capabilities.jsonMode == TriState.YES) &&
             (!requirements.needsVision || capabilities.vision == TriState.YES)
