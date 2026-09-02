@@ -7,9 +7,13 @@ android {
     namespace = "com.moatazvid.speech.android"
     compileSdk = 36
     defaultConfig {
-        minSdk = 26
+        minSdk = 28
         externalNativeBuild { cmake { cppFlags += listOf("-std=c++17", "-O3") } }
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
 }

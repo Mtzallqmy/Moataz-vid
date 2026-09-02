@@ -1,5 +1,7 @@
 package com.moatazvid.storage.room
 
+import androidx.room3.withWriteTransaction
+
 /** The only write gateway allowed to mutate Timeline and history together. */
 class RoomTransactionStore(private val database: MoatazVidDatabase) {
     suspend fun commit(
