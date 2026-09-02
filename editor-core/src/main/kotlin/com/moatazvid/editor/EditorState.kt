@@ -40,7 +40,7 @@ data class InspectorUiState(
     val selectedTransitionId: String? = null,
 )
 
-enum class AiChatStage { IDLE, THINKING, USING_TOOLS, BUILDING_PLAN, SIMULATING, PLAN_READY, APPLYING, DONE, ERROR, CANCELLED }
+enum class AiChatStage { IDLE, THINKING, BUILDING_STRATEGY, STRATEGY_READY, USING_TOOLS, BUILDING_PLAN, SIMULATING, PLAN_READY, APPLYING, DONE, ERROR, CANCELLED }
 data class ChatBubble(val id: String, val fromUser: Boolean, val text: String, val streaming: Boolean = false, val error: Boolean = false)
 data class AiChatUiState(
     val stage: AiChatStage = AiChatStage.IDLE,
@@ -67,6 +67,7 @@ data class EditorUiState(
     val selection: EditorSelectionContext = EditorSelectionContext(emptySet(), null),
     val inspector: InspectorUiState = InspectorUiState(),
     val aiChat: AiChatUiState = AiChatUiState(),
+    val pendingStrategy: PendingEditStrategy? = null,
     val pendingPlan: PendingEditTransaction? = null,
     val previewingPending: Boolean = false,
     val trimGesture: TrimGestureState? = null,
