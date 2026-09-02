@@ -21,6 +21,7 @@ import org.json.JSONObject
 /**
  * Application composition for cloud AI. Profiles live in Room and API keys are encrypted by
  * Android Keystore before their ciphertext is persisted in app-private SharedPreferences.
+ * Cloud model resolution is additionally gated by the user's persisted privacy choices.
  */
 class ProductionAiProviderRuntime(
     context: Context,
@@ -29,9 +30,15 @@ class ProductionAiProviderRuntime(
     private val profileStore = RoomProviderProfileStore(database.aiProviderDao())
     private val secretStore = AndroidKeystoreSecretStore(SharedPreferencesSecretBlobStore(context))
     private val factory = ProviderFactory(UrlConnectionHttpTransport(), secretStore)
+    private val userPreferences = UserPreferences(context)
 
     val settings = ProviderSettingsService(profileStore, secretStore, factory::create)
-    val modelResolver: EditingModelResolver = ProductionEditingModelResolver(profileStore, factory)
+    val modelResolver: EditingModelResolver = ProductionEditingModelResolver(
+        profiles = profileStore,
+        factory = factory,
+        cloudTextAllowed = { userPreferences.cloudTextAllowed },
+        visionAllowed = { userPreferences.visionAllowed },
+    )
     val proposalClient = ProviderEditPlanClient()
 
     suspend fun profiles(): List<ProviderProfile> = profileStore.list()
@@ -99,8 +106,29 @@ class ProductionAiProviderRuntime(
 private class ProductionEditingModelResolver(
     private val profiles: RoomProviderProfileStore,
     private val factory: ProviderFactory,
+    private val cloudTextAllowed: () -> Boolean,
+    private val visionAllowed: () -> Boolean,
 ) : EditingModelResolver {
     override suspend fun resolve(requirements: TaskRequirements, role: ModelRole): LlmResult<EditingModel> {
+        if (!cloudTextAllowed()) {
+            return LlmResult.Failure(
+                LlmError.UnsupportedCapability(
+                    ProviderId("privacy-policy"),
+                    null,
+                    "Cloud text sharing is disabled in Settings",
+                )
+            )
+        }
+        if (requirements.needsVision && !visionAllowed()) {
+            return LlmResult.Failure(
+                LlmError.UnsupportedCapability(
+                    ProviderId("privacy-policy"),
+                    null,
+                    "Vision frame sharing is disabled in Settings",
+                )
+            )
+        }
+
         val allProfiles = profiles.list().filter { it.enabled }
         val assignments = profiles.assignments()
         val direct = assignments.firstOrNull { it.role == role }
