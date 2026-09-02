@@ -18,8 +18,9 @@ rootProject.name = "MoatazVid"
 
 include(":core-model")
 include(":storage-core")
-include(":media-engine")
 include(":speech-core")
+include(":video-use-core")
+include(":media-engine")
 include(":ai-provider-core")
 include(":ai-editor-core")
 include(":editor-core")

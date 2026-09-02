@@ -4,6 +4,7 @@ kotlin { jvmToolchain(17) }
 
 dependencies {
     api(project(":core-model"))
+    implementation(project(":video-use-core"))
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotlinx.coroutines.test)
