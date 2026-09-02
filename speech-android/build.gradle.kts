@@ -3,13 +3,21 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
+val includeEmulatorAbi = providers.gradleProperty("includeEmulatorAbi").orNull == "true"
+
 android {
     namespace = "com.moatazvid.speech.android"
     compileSdk = 36
     defaultConfig {
-        minSdk = 28
+        minSdk = 26
         externalNativeBuild { cmake { cppFlags += listOf("-std=c++17", "-O3") } }
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        ndk {
+            abiFilters += if (includeEmulatorAbi) {
+                listOf("arm64-v8a", "x86_64")
+            } else {
+                listOf("arm64-v8a")
+            }
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
