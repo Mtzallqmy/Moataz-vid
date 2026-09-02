@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Moataz vid</string>
+    <string name="app_name">معتز فيد</string>
     <string name="home_title">المشاريع</string>
     <string name="new_project">مشروع جديد</string>
     <string name="import_video">استيراد فيديو</string>
     <string name="recent_projects">المشاريع الأخيرة</string>
-    <string name="empty_projects">لا توجد مشاريع بعد. أنشئ مشروعًا أو استورد فيديو لبدء التحرير.</string>
+    <string name="empty_projects">محرر فيديو محلي على جهازك. أنشئ مشروعًا أو استورد فيديو للبدء.</string>
     <string name="settings">الإعدادات</string>
     <string name="about">حول التطبيق</string>
     <string name="privacy">الخصوصية</string>
@@ -36,4 +36,7 @@
     <string name="import_failed">تعذر استيراد هذا الملف.</string>
     <string name="permission_lost">فُقد إذن الوصول إلى المصدر. أعد اختيار الملف الأصلي.</string>
     <string name="manual_mode_available">التحرير اليدوي يعمل بدون إعداد مزود ذكاء اصطناعي.</string>
+    <string name="startup_failed">تعذر بدء التطبيق</string>
+    <string name="retry">إعادة المحاولة</string>
+    <string name="ai_unconfigured_banner">الذكاء الاصطناعي السحابي غير مُعد. التحرير اليدوي يعمل محليًا.</string>
 </resources>
