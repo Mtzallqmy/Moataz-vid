@@ -4,18 +4,26 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
+val includeEmulatorAbi = providers.gradleProperty("includeEmulatorAbi").orNull == "true"
+
 android {
     namespace = "com.moatazvid.app"
     compileSdk = 36
 
     defaultConfig {
         applicationId = "com.moatazvid.app"
-        minSdk = 28
+        minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        ndk {
+            abiFilters += if (includeEmulatorAbi) {
+                listOf("arm64-v8a", "x86_64")
+            } else {
+                listOf("arm64-v8a")
+            }
+        }
     }
 
     buildFeatures {
@@ -34,6 +42,13 @@ android {
     }
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
+    }
+    lint {
+        abortOnError = true
+        checkReleaseBuilds = true
+    }
+    testOptions {
+        animationsDisabled = true
     }
 }
 
