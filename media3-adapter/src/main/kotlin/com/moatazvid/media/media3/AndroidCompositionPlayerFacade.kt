@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Concrete CompositionPlayer binding shared with the same Composition factory as final export. */
+/** Concrete CompositionPlayer binding shared with the same video-use-normalized Composition factory as final export. */
 @OptIn(UnstableApi::class)
 class AndroidCompositionPlayerFacade(
     private val context: Context,
@@ -27,7 +27,7 @@ class AndroidCompositionPlayerFacade(
             sessions.remove(sessionId)?.release()
             val player = CompositionPlayer.Builder(context).build()
             attachSurface(player, surface.token)
-            player.setComposition(compositionFactory.build(composition))
+            player.setComposition(compositionFactory.build(VideoUseMedia3Policy.normalize(composition)))
             player.prepare()
             sessions[sessionId] = player
         }
@@ -37,7 +37,7 @@ class AndroidCompositionPlayerFacade(
             val player = requireNotNull(sessions[sessionId]) { "Unknown preview session $sessionId" }
             val positionMs = player.currentPosition.coerceAtLeast(0L)
             val wasPlaying = player.playWhenReady
-            player.setComposition(compositionFactory.build(composition), positionMs)
+            player.setComposition(compositionFactory.build(VideoUseMedia3Policy.normalize(composition)), positionMs)
             player.prepare()
             player.playWhenReady = wasPlaying
         }
