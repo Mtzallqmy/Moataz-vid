@@ -5,6 +5,21 @@ import com.moatazvid.core.*
 import com.moatazvid.media.*
 
 class ProviderEditPlanClient(private val codec: EditPlanJsonCodec = EditPlanJsonCodec()) : EditPlanProposalClient {
+    override suspend fun strategy(model: EditingModel, context: AiTaskContext): LlmResult<String> {
+        val request = LlmRequest(
+            RequestId("strategy_${System.currentTimeMillis()}"),
+            model.descriptor.id,
+            listOf(
+                LlmMessage(LlmRole.SYSTEM, listOf(LlmContentPart.Text(PromptRepository.coreRules))),
+                LlmMessage(LlmRole.USER, listOf(LlmContentPart.Text(PromptRepository.strategy(context)))),
+            ),
+        )
+        return when (val result = model.provider.complete(request)) {
+            is LlmResult.Success -> LlmResult.Success(result.value.text)
+            is LlmResult.Failure -> result
+        }
+    }
+
     override suspend fun propose(model: EditingModel, context: AiTaskContext, previous: EditPlan?, feedback: String?): LlmResult<EditPlan> {
         val prompt = PromptRepository.editPlan(context) + (previous?.let { "\nPREVIOUS_PLAN_DATA id=${it.id.value} summary=${it.summary}\nUSER_FEEDBACK=${feedback.orEmpty()}" } ?: "")
         val request = LlmRequest(RequestId("edit_${System.currentTimeMillis()}"), model.descriptor.id,

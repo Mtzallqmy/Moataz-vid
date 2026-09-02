@@ -27,8 +27,8 @@ class ContextBudgetManager(private val estimator: TokenBudgetEstimator = Conserv
     }
     private fun priority(section: ContextSection) = when (section) {
         ContextSection.PROTECTED_RANGES, ContextSection.CONSTRAINTS -> 0
-        ContextSection.PROJECT_INFO, ContextSection.TIMELINE -> 1
-        ContextSection.TRANSCRIPT_SEARCH, ContextSection.SILENCE, ContextSection.DUPLICATES -> 2
+        ContextSection.PROJECT_INFO, ContextSection.TRANSCRIPT_SEARCH -> 1
+        ContextSection.TIMELINE, ContextSection.WORD_BOUNDARIES, ContextSection.SILENCE, ContextSection.DUPLICATES -> 2
         else -> 3
     }
 }
@@ -65,14 +65,22 @@ class AiContextBuilder(private val tools: AiProjectReadTools, private val budget
         fragments += tools.projectInfo(projectId)
         when (intent.intent) {
             AiIntent.EDIT_PROJECT, AiIntent.CAPTION_EDIT, AiIntent.AUDIO_EDIT, AiIntent.VISUAL_EDIT, AiIntent.STRUCTURE_EDIT -> {
-                fragments += tools.timelineSummary(projectId); fragments += tools.constraints(projectId); fragments += tools.protectedRanges(projectId)
+                // video-use primary reading view: packed transcript first, timeline/visual detail second.
+                fragments += tools.searchTranscript(projectId, "")
+                fragments += tools.timelineSummary(projectId)
+                fragments += tools.constraints(projectId)
+                fragments += tools.protectedRanges(projectId)
+                tools.wordBoundaries(projectId, null)?.let(fragments::add)
             }
             AiIntent.FIND_CONTENT -> fragments += tools.searchTranscript(projectId, intent.entities["query"].orEmpty())
             AiIntent.EXPLAIN_EDIT -> fragments += tools.recentHistory(projectId)
             else -> Unit
         }
         val lower = message.lowercase()
-        if ("صمت" in lower || "silence" in lower) { fragments += tools.silenceRanges(projectId); tools.wordBoundaries(projectId, null)?.let(fragments::add) }
+        if ("صمت" in lower || "silence" in lower) {
+            fragments += tools.silenceRanges(projectId)
+            tools.wordBoundaries(projectId, null)?.let(fragments::add)
+        }
         if ("تكرار" in lower || "أفضل" in lower || "take" in lower) fragments += tools.duplicateCandidates(projectId, intent.entities["query"])
         if (intent.intent == AiIntent.AUDIO_EDIT) fragments += tools.audioAnalysis(projectId)
         val (accepted, omitted) = budgets.fit(fragments.distinctBy { it.section to it.label }, budget)

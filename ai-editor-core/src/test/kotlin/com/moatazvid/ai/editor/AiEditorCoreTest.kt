@@ -71,14 +71,18 @@ class AiEditorCoreTest {
         assertTrue(remove.sourceRange.duration.value > 1_500_000)
     }
 
-    @Test fun `repair loop replaces invalid plan`() = runBlocking {
+    @Test fun `strategy confirmation gates repair loop and plan creation`() = runBlocking {
         val project = fixture(); val data = FakeData(project); val store = InMemoryAiTimelineStore(project)
         val invalid = plan(project, listOf(EditOperation.RemoveClip(ClipId("missing"), "bad")))
         val valid = plan(project, listOf(EditOperation.RemoveClip(CLIP, "fixed")))
         val client = FakeProposal(invalid, valid)
         val engine = AiEditorEngine(data, store, AiContextBuilder(data), resolver(), client)
-        val result = engine.analyzeMessage(PROJECT, "اختصر الفيديو")
-        assertTrue(result is AiEditorResult.PlanReady); assertEquals(1, client.repairs)
+        val first = engine.analyzeMessage(PROJECT, "اختصر الفيديو")
+        assertTrue(first is AiEditorResult.StrategyReady)
+        assertEquals(0, client.repairs)
+        val result = engine.confirmStrategy((first as AiEditorResult.StrategyReady).strategy)
+        assertTrue(result is AiEditorResult.PlanReady)
+        assertEquals(1, client.repairs)
     }
 
     @Test fun `prompt treats transcript injection as data`() {
@@ -113,7 +117,7 @@ private class FakeProposal(private val initial: EditPlan, private val repaired: 
     var repairs = 0
     override suspend fun propose(model: EditingModel, context: AiTaskContext, previous: EditPlan?, feedback: String?) = LlmResult.Success(initial)
     override suspend fun repair(model: EditingModel, invalid: EditPlan, errors: List<PlanValidationError>, validIds: Set<String>, attempt: Int): LlmResult<EditPlan> { repairs++; return LlmResult.Success(repaired) }
-    override suspend fun analyze(model: EditingModel, context: AiTaskContext) = LlmResult.Success("analysis")
+    override suspend fun analyze(model: EditingModel, context: AiTaskContext) = LlmResult.Success("سأرتب المادة ثم أختصرها مع الحفاظ على المعنى.")
 }
 
 private class FakeProvider : LlmProvider {

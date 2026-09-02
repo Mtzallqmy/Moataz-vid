@@ -6,10 +6,38 @@ import com.moatazvid.speech.*
 import com.moatazvid.storage.StorageError
 import kotlinx.coroutines.CancellationException
 
-enum class AiEditorStage { IDLE, CLASSIFYING, BUILDING_CONTEXT, USING_TOOLS, BUILDING_PLAN, REPAIRING_PLAN, SIMULATING, PLAN_READY, APPLYING, DONE, ERROR, CANCELLED }
+enum class AiEditorStage {
+    IDLE,
+    CLASSIFYING,
+    BUILDING_CONTEXT,
+    BUILDING_STRATEGY,
+    STRATEGY_READY,
+    USING_TOOLS,
+    BUILDING_PLAN,
+    REPAIRING_PLAN,
+    SIMULATING,
+    PLAN_READY,
+    APPLYING,
+    DONE,
+    ERROR,
+    CANCELLED,
+}
+
 data class AiEditorProgress(val stage: AiEditorStage, val userVisibleStatus: String)
+
+data class PendingEditStrategy(
+    val id: String,
+    val projectId: ProjectId,
+    val baseRevision: Long,
+    val userInstruction: String,
+    val summary: String,
+    val intent: IntentResult,
+    val createdAtEpochMs: Long,
+)
+
 sealed interface AiEditorResult {
     data class Analysis(val text: String, val intent: IntentResult) : AiEditorResult
+    data class StrategyReady(val strategy: PendingEditStrategy) : AiEditorResult
     data class PlanReady(val pending: PendingEditTransaction, val intent: IntentResult) : AiEditorResult
     data class ConstraintSaved(val constraint: ProjectConstraint) : AiEditorResult
     data class Applied(val result: CommitResult.Success) : AiEditorResult
@@ -35,9 +63,13 @@ interface EditPlanProposalClient {
     suspend fun propose(model: EditingModel, context: AiTaskContext, previous: EditPlan? = null, feedback: String? = null): LlmResult<EditPlan>
     suspend fun repair(model: EditingModel, invalid: EditPlan, errors: List<PlanValidationError>, validIds: Set<String>, attempt: Int): LlmResult<EditPlan>
     suspend fun analyze(model: EditingModel, context: AiTaskContext): LlmResult<String>
+    suspend fun strategy(model: EditingModel, context: AiTaskContext): LlmResult<String> = analyze(model, context)
 }
 
-data class AiEditorPolicy(val maxRepairAttempts: Int = 2, val contextBudget: ContextBudget = ContextBudget(32_000, 4_000, 1_500, 2_000))
+data class AiEditorPolicy(
+    val maxRepairAttempts: Int = 2,
+    val contextBudget: ContextBudget = ContextBudget(32_000, 4_000, 1_500, 2_000),
+)
 
 class AiEditorEngine(
     private val data: AiEditorDataSource,
@@ -52,7 +84,12 @@ class AiEditorEngine(
     private val policy: AiEditorPolicy = AiEditorPolicy(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    suspend fun analyzeMessage(projectId: ProjectId, message: String, currentPending: PendingEditTransaction? = null, onProgress: (AiEditorProgress) -> Unit = {}): AiEditorResult {
+    suspend fun analyzeMessage(
+        projectId: ProjectId,
+        message: String,
+        currentPending: PendingEditTransaction? = null,
+        onProgress: (AiEditorProgress) -> Unit = {},
+    ): AiEditorResult {
         return try {
             onProgress(AiEditorProgress(AiEditorStage.CLASSIFYING, "أفهم طلبك…"))
             val intent = intents.classify(message, currentPending?.status == PendingEditStatus.READY)
@@ -66,25 +103,111 @@ class AiEditorEngine(
                 AiIntent.PROJECT_CONSTRAINT -> saveConstraint(project, message, intent)
                 AiIntent.FIND_CONTENT, AiIntent.ANALYZE_PROJECT -> analyze(project, message, intent, onProgress)
                 AiIntent.CLARIFICATION_REQUIRED -> AiEditorResult.Clarification("ما الجزء أو النتيجة التي تريد تعديلها؟")
-                else -> proposeEdit(project, message, intent, currentPending, onProgress)
+                else -> proposeStrategy(project, message, intent, onProgress)
             }
-        } catch (_: CancellationException) { onProgress(AiEditorProgress(AiEditorStage.CANCELLED, "أُلغي الطلب")); AiEditorResult.Cancelled }
-        catch (failure: Throwable) { onProgress(AiEditorProgress(AiEditorStage.ERROR, "تعذر إكمال الطلب")); AiEditorResult.Failure("ai.editor.failure", failure.message) }
+        } catch (_: CancellationException) {
+            onProgress(AiEditorProgress(AiEditorStage.CANCELLED, "أُلغي الطلب"))
+            AiEditorResult.Cancelled
+        } catch (failure: Throwable) {
+            onProgress(AiEditorProgress(AiEditorStage.ERROR, "تعذر إكمال الطلب"))
+            AiEditorResult.Failure("ai.editor.failure", failure.message)
+        }
     }
 
     suspend fun buildContext(projectId: ProjectId, message: String, intent: IntentResult): AiTaskContext {
-        val project = requireNotNull(data.project(projectId)); return contextBuilder.build(projectId, project.revision, message, intent, policy.contextBudget)
+        val project = requireNotNull(data.project(projectId))
+        return contextBuilder.build(projectId, project.revision, message, intent, policy.contextBudget)
     }
 
-    suspend fun proposeEdit(project: AiEditableProject, message: String, intent: IntentResult = intents.classify(message), previous: PendingEditTransaction? = null,
-        onProgress: (AiEditorProgress) -> Unit = {}): AiEditorResult {
+    suspend fun confirmStrategy(
+        strategy: PendingEditStrategy,
+        onProgress: (AiEditorProgress) -> Unit = {},
+    ): AiEditorResult {
+        val project = data.project(strategy.projectId) ?: return AiEditorResult.Failure("project.not_found")
+        if (project.revision != strategy.baseRevision) return AiEditorResult.Failure("strategy.stale")
+        return proposeEdit(project, strategy.userInstruction, strategy.intent, null, onProgress)
+    }
+
+    private suspend fun proposeStrategy(
+        project: AiEditableProject,
+        message: String,
+        intent: IntentResult,
+        onProgress: (AiEditorProgress) -> Unit,
+    ): AiEditorResult {
+        onProgress(AiEditorProgress(AiEditorStage.BUILDING_CONTEXT, "أجمع النص والتايملاين وقيود المشروع…"))
+        val context = contextBuilder.build(project.snapshot.project.id, project.revision, message, intent, policy.contextBudget)
+
+        // Offline deterministic edits still honor video-use's strategy-confirmation gate.
+        deterministicPlan(project, message)?.let { deterministic ->
+            val summary = buildString {
+                append("سأتعامل مع الصوت والنص أولًا، ثم أستخدم الصورة فقط عند نقاط القرار. ")
+                append(deterministic.summary.ifBlank { deterministic.title })
+                append(" سأحافظ على حدود الكلمات وأترك هامشًا آمنًا حول القطوع مع تلاشي صوتي قصير عند كل حد. ")
+                append("سأعرض النتيجة كخطة قابلة للمعاينة والتراجع قبل تطبيق أي تغيير على المشروع.")
+            }
+            onProgress(AiEditorProgress(AiEditorStage.STRATEGY_READY, "الاستراتيجية جاهزة لاعتمادك"))
+            return AiEditorResult.StrategyReady(
+                PendingEditStrategy(
+                    id = "strategy_${clock()}",
+                    projectId = project.snapshot.project.id,
+                    baseRevision = project.revision,
+                    userInstruction = message,
+                    summary = summary,
+                    intent = intent,
+                    createdAtEpochMs = clock(),
+                )
+            )
+        }
+
+        val requirements = TaskRequirements(
+            needsStructured = false,
+            needsVision = intent.intent == AiIntent.VISUAL_EDIT && (message.contains("أجمل") || message.contains("أفضل لقطة")),
+            minimumContext = context.estimatedTokens + 2_000,
+        )
+        val model = when (val resolved = modelResolver.resolve(requirements, ModelRole.FAST)) {
+            is LlmResult.Success -> resolved.value
+            is LlmResult.Failure -> return AiEditorResult.Failure("ai.provider_unavailable", resolved.error.userMessageKey)
+        }
+        onProgress(AiEditorProgress(AiEditorStage.BUILDING_STRATEGY, "أبني استراتيجية المونتاج قبل التنفيذ…"))
+        val summary = when (val proposed = proposalClient.strategy(model, context)) {
+            is LlmResult.Success -> proposed.value.trim()
+            is LlmResult.Failure -> return AiEditorResult.Failure(proposed.error.userMessageKey)
+        }
+        if (summary.isBlank()) return AiEditorResult.Failure("strategy.empty")
+        onProgress(AiEditorProgress(AiEditorStage.STRATEGY_READY, "الاستراتيجية جاهزة لاعتمادك"))
+        return AiEditorResult.StrategyReady(
+            PendingEditStrategy(
+                id = "strategy_${clock()}",
+                projectId = project.snapshot.project.id,
+                baseRevision = project.revision,
+                userInstruction = message,
+                summary = summary,
+                intent = intent,
+                createdAtEpochMs = clock(),
+            )
+        )
+    }
+
+    suspend fun proposeEdit(
+        project: AiEditableProject,
+        message: String,
+        intent: IntentResult = intents.classify(message),
+        previous: PendingEditTransaction? = null,
+        onProgress: (AiEditorProgress) -> Unit = {},
+    ): AiEditorResult {
         deterministicPlan(project, message)?.let { plan ->
             onProgress(AiEditorProgress(AiEditorStage.SIMULATING, "أحاكي التعديلات…"))
-            return pending.create(ids.pending(), plan, null, "local-deterministic").let { if (it.status == PendingEditStatus.READY) AiEditorResult.PlanReady(it, intent) else AiEditorResult.Failure("edit_plan.invalid") }
+            return pending.create(ids.pending(), plan, null, "local-deterministic").let {
+                if (it.status == PendingEditStatus.READY) AiEditorResult.PlanReady(it, intent) else AiEditorResult.Failure("edit_plan.invalid")
+            }
         }
         onProgress(AiEditorProgress(AiEditorStage.BUILDING_CONTEXT, "أجمع بيانات المشروع اللازمة…"))
         val context = contextBuilder.build(project.snapshot.project.id, project.revision, message, intent, policy.contextBudget)
-        val requirements = TaskRequirements(needsStructured = true, needsVision = intent.intent == AiIntent.VISUAL_EDIT && (message.contains("أجمل") || message.contains("أفضل لقطة")), minimumContext = context.estimatedTokens + 4_000)
+        val requirements = TaskRequirements(
+            needsStructured = true,
+            needsVision = intent.intent == AiIntent.VISUAL_EDIT && (message.contains("أجمل") || message.contains("أفضل لقطة")),
+            minimumContext = context.estimatedTokens + 4_000,
+        )
         val model = when (val resolved = modelResolver.resolve(requirements, ModelRole.EDITING)) {
             is LlmResult.Success -> resolved.value
             is LlmResult.Failure -> return AiEditorResult.Failure("ai.provider_unavailable", resolved.error.userMessageKey)
@@ -107,29 +230,46 @@ class AiEditorEngine(
         }
         if (!validation.valid) return AiEditorResult.Failure("edit_plan.invalid_after_repair", validation.errors.joinToString { it.code })
         onProgress(AiEditorProgress(AiEditorStage.SIMULATING, "أحاكي التعديلات…"))
-        val created = pending.create(ids.pending(), plan, model.provider.profile.id, model.descriptor.id)
-        return if (created.status == PendingEditStatus.READY) { onProgress(AiEditorProgress(AiEditorStage.PLAN_READY, "الخطة جاهزة للمعاينة")); AiEditorResult.PlanReady(created, intent) }
-        else AiEditorResult.Failure("edit_plan.simulation_failed", created.simulationResult.unsupportedOperations.joinToString())
+        val created = pending.create(ids.pending(), validation.normalizedPlan, model.provider.profile.id, model.descriptor.id)
+        return if (created.status == PendingEditStatus.READY) {
+            onProgress(AiEditorProgress(AiEditorStage.PLAN_READY, "الخطة جاهزة للمعاينة"))
+            AiEditorResult.PlanReady(created, intent)
+        } else AiEditorResult.Failure("edit_plan.simulation_failed", created.simulationResult.unsupportedOperations.joinToString())
     }
 
-    suspend fun revisePendingEdit(projectId: ProjectId, pendingId: PendingEditId, feedback: String, onProgress: (AiEditorProgress) -> Unit = {}): AiEditorResult {
+    suspend fun revisePendingEdit(
+        projectId: ProjectId,
+        pendingId: PendingEditId,
+        feedback: String,
+        onProgress: (AiEditorProgress) -> Unit = {},
+    ): AiEditorResult {
         val previous = pending.get(pendingId) ?: return AiEditorResult.Failure("pending.not_found")
         val project = data.project(projectId) ?: return AiEditorResult.Failure("project.not_found")
         if (project.revision != previous.baseRevision) return AiEditorResult.Failure("pending.stale")
         return proposeEdit(project, feedback, intents.classify(feedback, true), previous, onProgress)
     }
-    suspend fun explainEdit(pendingId: PendingEditId): AiEditorResult = pending.get(pendingId)?.simulationResult?.diff?.let { AiEditorResult.Analysis(it.userSummary, IntentResult(AiIntent.EXPLAIN_EDIT, 1.0, deterministic = true)) }
-        ?: AiEditorResult.Failure("pending.not_found")
+
+    suspend fun explainEdit(pendingId: PendingEditId): AiEditorResult = pending.get(pendingId)?.simulationResult?.diff?.let {
+        AiEditorResult.Analysis(it.userSummary, IntentResult(AiIntent.EXPLAIN_EDIT, 1.0, deterministic = true))
+    } ?: AiEditorResult.Failure("pending.not_found")
+
     suspend fun applyPendingEdit(pendingId: PendingEditId): AiEditorResult = when (val result = pending.apply(pendingId, ids.transaction())) {
-        is CommitResult.Success -> AiEditorResult.Applied(result); is CommitResult.Failure -> AiEditorResult.Failure("apply.failed", result.error.toString())
+        is CommitResult.Success -> AiEditorResult.Applied(result)
+        is CommitResult.Failure -> AiEditorResult.Failure("apply.failed", result.error.toString())
     }
-    suspend fun cancelPendingEdit(pendingId: PendingEditId): AiEditorResult = pending.reject(pendingId)?.let { AiEditorResult.Analysis("تم رفض الخطة ولم يتغير المشروع.", IntentResult(AiIntent.EDIT_PROJECT, 1.0, deterministic = true)) }
-        ?: AiEditorResult.Failure("pending.not_found")
+
+    suspend fun cancelPendingEdit(pendingId: PendingEditId): AiEditorResult = pending.reject(pendingId)?.let {
+        AiEditorResult.Analysis("تم رفض الخطة ولم يتغير المشروع.", IntentResult(AiIntent.EDIT_PROJECT, 1.0, deterministic = true))
+    } ?: AiEditorResult.Failure("pending.not_found")
+
     suspend fun undoLastAiEdit(sequenceId: SequenceId): AiEditorResult = when (val result = store.undo(sequenceId, aiOnly = true)) {
-        is CommitResult.Success -> AiEditorResult.HistoryChanged(result, true); is CommitResult.Failure -> AiEditorResult.Failure("undo.unavailable", result.error.toString())
+        is CommitResult.Success -> AiEditorResult.HistoryChanged(result, true)
+        is CommitResult.Failure -> AiEditorResult.Failure("undo.unavailable", result.error.toString())
     }
+
     suspend fun redoLastAiEdit(sequenceId: SequenceId): AiEditorResult = when (val result = store.redo(sequenceId)) {
-        is CommitResult.Success -> AiEditorResult.HistoryChanged(result, false); is CommitResult.Failure -> AiEditorResult.Failure("redo.unavailable", result.error.toString())
+        is CommitResult.Success -> AiEditorResult.HistoryChanged(result, false)
+        is CommitResult.Failure -> AiEditorResult.Failure("redo.unavailable", result.error.toString())
     }
 
     private suspend fun deterministicPlan(project: AiEditableProject, message: String): EditPlan? {
@@ -139,26 +279,57 @@ class AiEditorEngine(
             val commandPolicy = threshold?.let { SilenceEditPolicy(minimumDetectedSilence = DurationUs((it * 1_000_000).toLong())) } ?: SilenceEditPolicy()
             return SilenceCommandPlanner(ids, commandPolicy).plan(project, data.silence(project.snapshot.project.id), data.transcriptWords(project.snapshot.project.id))
         }
-        if (lower.contains("أفضل محاولة") || lower.contains("أفضل take") || lower.contains("best take")) return BestTakePlanner(ids).plan(project, data.takeGroups(project.snapshot.project.id))
-        if (lower.contains("9:16") && !lower.contains("ريل") && !lower.contains("reel")) return EditPlan(id = ids.plan(), projectId = project.snapshot.project.id,
-            sequenceId = project.snapshot.sequence.id, baseProjectRevision = project.revision, title = "تحويل المشروع إلى 9:16", summary = "تغيير Canvas إلى فيديو عمودي.",
-            operations = listOf(EditOperation.SetProjectAspectRatio(1080, 1920)), estimatedResult = EstimatedEditResult(project.duration, project.duration))
+        if (lower.contains("أفضل محاولة") || lower.contains("أفضل take") || lower.contains("best take")) {
+            return BestTakePlanner(ids).plan(project, data.takeGroups(project.snapshot.project.id))
+        }
+        if (lower.contains("9:16") && !lower.contains("ريل") && !lower.contains("reel")) {
+            return EditPlan(
+                id = ids.plan(),
+                projectId = project.snapshot.project.id,
+                sequenceId = project.snapshot.sequence.id,
+                baseProjectRevision = project.revision,
+                title = "تحويل المشروع إلى 9:16",
+                summary = "تغيير Canvas إلى فيديو عمودي.",
+                operations = listOf(EditOperation.SetProjectAspectRatio(1080, 1920)),
+                estimatedResult = EstimatedEditResult(project.duration, project.duration),
+            )
+        }
         return null
     }
 
-    private suspend fun analyze(project: AiEditableProject, message: String, intent: IntentResult, progress: (AiEditorProgress) -> Unit): AiEditorResult {
+    private suspend fun analyze(
+        project: AiEditableProject,
+        message: String,
+        intent: IntentResult,
+        progress: (AiEditorProgress) -> Unit,
+    ): AiEditorResult {
         val context = contextBuilder.build(project.snapshot.project.id, project.revision, message, intent, policy.contextBudget)
         val model = when (val result = modelResolver.resolve(TaskRequirements(minimumContext = context.estimatedTokens + 1_000), ModelRole.FAST)) {
-            is LlmResult.Success -> result.value; is LlmResult.Failure -> return AiEditorResult.Failure("ai.provider_unavailable")
+            is LlmResult.Success -> result.value
+            is LlmResult.Failure -> return AiEditorResult.Failure("ai.provider_unavailable")
         }
         progress(AiEditorProgress(AiEditorStage.BUILDING_CONTEXT, "أحلل بيانات المشروع…"))
-        return when (val result = proposalClient.analyze(model, context)) { is LlmResult.Success -> AiEditorResult.Analysis(result.value, intent); is LlmResult.Failure -> AiEditorResult.Failure(result.error.userMessageKey) }
+        return when (val result = proposalClient.analyze(model, context)) {
+            is LlmResult.Success -> AiEditorResult.Analysis(result.value, intent)
+            is LlmResult.Failure -> AiEditorResult.Failure(result.error.userMessageKey)
+        }
     }
+
     private suspend fun saveConstraint(project: AiEditableProject, message: String, intent: IntentResult): AiEditorResult {
         val ranges = data.resolvePreservedTopic(project.snapshot.project.id, message)
-        val constraint = ProjectConstraint(ConstraintId("constraint_${clock()}"), project.snapshot.project.id,
-            if (ranges.isNotEmpty()) ProjectConstraintType.PRESERVE_RANGE else ProjectConstraintType.PRESERVE_TOPIC, message,
-            ranges.firstOrNull()?.sourceId, ranges.firstOrNull()?.sourceRange, ConstraintSource.USER, ConstraintPriority.REQUIRED, "user", clock())
-        data.saveConstraint(constraint); return AiEditorResult.ConstraintSaved(constraint)
+        val constraint = ProjectConstraint(
+            ConstraintId("constraint_${clock()}"),
+            project.snapshot.project.id,
+            if (ranges.isNotEmpty()) ProjectConstraintType.PRESERVE_RANGE else ProjectConstraintType.PRESERVE_TOPIC,
+            message,
+            ranges.firstOrNull()?.sourceId,
+            ranges.firstOrNull()?.sourceRange,
+            ConstraintSource.USER,
+            ConstraintPriority.REQUIRED,
+            "user",
+            clock(),
+        )
+        data.saveConstraint(constraint)
+        return AiEditorResult.ConstraintSaved(constraint)
     }
 }
