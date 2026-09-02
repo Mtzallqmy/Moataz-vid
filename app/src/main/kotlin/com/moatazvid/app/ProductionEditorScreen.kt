@@ -44,7 +44,9 @@ fun ProductionEditorScreen(
     val gateway = remember(projectId.value) { ProductionSpeechEditorGateway(repository, speechRuntime) }
     val player = remember(projectId.value) { ProductionEditorPlayer(context, repository, surfaceView, runtimeScope) }
     val persistence = remember(projectId.value) { SharedPreferencesEditorStatePersistence(context) }
-    val aiData = remember(projectId.value) { ProductionSpeechAiDataSource(repository, speechRuntime) }
+    val aiData = remember(projectId.value) {
+        VideoUseProductionAiDataSource(ProductionSpeechAiDataSource(repository, speechRuntime))
+    }
     val ai = remember(projectId.value, aiRuntime, speechRuntime) {
         AiEditorEngine(
             data = aiData,
