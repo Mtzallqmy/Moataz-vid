@@ -160,9 +160,11 @@ class LocalWhisperProvider(
             lease = when (val result = models.acquire(pack.id)) { is SpeechResult.Success -> result.value; is SpeechResult.Failure -> throw SpeechFailure(result.error) }
             handle = when (val result = native.loadModel(pack.relativePath, device().cpuCores.coerceIn(1, 8))) { is SpeechResult.Success -> result.value; is SpeechResult.Failure -> throw SpeechFailure(result.error) }
             flow.emit(TranscriptionEvent.Started(request.jobId, null))
+            val previouslyCommittedWords = checkpoint?.committedWordCount ?: 0
+            val previouslyCommittedSegments = checkpoint?.committedSegmentCount ?: 0
             var completed = checkpoint?.completedChunkExclusive ?: request.resumeFromChunk
             var committedThrough = checkpoint?.lastCommittedSourceTime ?: TimeUs(0)
-            var sawUsableSignal = (checkpoint?.committedWordCount ?: 0) > 0
+            var sawUsableSignal = previouslyCommittedWords > 0
             var detectedLanguage = request.language.tag
             request.audio.chunks(completed).collect { chunk ->
                 if (flag.get()) throw CancellationException("cancelled")
@@ -179,11 +181,11 @@ class LocalWhisperProvider(
                 }
                 val newSegments = accepted.map { segment ->
                     val segmentId = TranscriptSegmentId(ids.next("segment"))
-                    TranscriptSegment(segmentId, transcriptId, request.sourceId, allSegments.size,
+                    TranscriptSegment(segmentId, transcriptId, request.sourceId, previouslyCommittedSegments + allSegments.size,
                         TimeRangeUs(TimeUs(segment.startUs), TimeUs(maxOf(segment.endUs, segment.startUs + 1))), segment.text,
                         ArabicTextNormalizer.normalize(segment.text), null, segment.probability).also { entity ->
                         segment.words.forEach { word ->
-                            allWords += TranscriptWord(TranscriptWordId(ids.next("word")), transcriptId, segmentId, request.sourceId, allWords.size,
+                            allWords += TranscriptWord(TranscriptWordId(ids.next("word")), transcriptId, segmentId, request.sourceId, previouslyCommittedWords + allWords.size,
                                 word.text, ArabicTextNormalizer.normalize(word.text), TimeRangeUs(TimeUs(word.startUs), TimeUs(maxOf(word.endUs, word.startUs + 1))),
                                 word.probability, LanguageCode(if (detectedLanguage == "auto") request.language.tag else detectedLanguage), null, word.type)
                         }
@@ -193,8 +195,8 @@ class LocalWhisperProvider(
                 completed = chunk.index + 1
                 committedThrough = TimeUs(maxOf(committedThrough.value, chunk.sourceStart.value + chunk.duration.value - chunk.overlapBefore.value))
                 checkpoint = TranscriptionCheckpoint(request.jobId, request.sourceFingerprint, completed,
-                    (checkpoint?.committedWordCount ?: 0).coerceAtLeast(0) + allWords.size,
-                    (checkpoint?.committedSegmentCount ?: 0).coerceAtLeast(0) + allSegments.size,
+                    previouslyCommittedWords + allWords.size,
+                    previouslyCommittedSegments + allSegments.size,
                     committedThrough, clock())
                 store.checkpoint(checkpoint!!, newSegments, allWords.takeLast(accepted.sumOf { it.words.size }))
                 flow.emit(TranscriptionEvent.Partial(request.jobId, checkpoint!!, newSegments, allWords.takeLast(accepted.sumOf { it.words.size })))
