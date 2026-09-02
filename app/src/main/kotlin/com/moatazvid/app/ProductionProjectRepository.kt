@@ -378,6 +378,7 @@ class ProductionProjectRepository private constructor(
             )
         }
         database.withWriteTransaction {
+            // Captions have a track FK, while overlays/effects/transitions cascade when old clips are removed.
             database.timelineDao().deleteCaptionsBySequence(sequenceId)
             database.timelineDao().deleteTransitionsBySequence(sequenceId)
             database.timelineDao().deleteClipsBySequence(sequenceId)
