@@ -30,16 +30,69 @@ fun AiChatPanel(
     var input by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         Text("مساعد المونتاج", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 8.dp))
+        Text("Transcript-first · Audio-first · Preview before apply", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.aiChat.providerMissing) ProviderMissingCard()
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
             items(state.aiChat.messages, key = { it.id }) { bubble -> ChatBubbleView(bubble) }
+            state.pendingStrategy?.let { strategy ->
+                item("strategy_${strategy.id}") {
+                    VideoUseStrategyCard(
+                        strategy = strategy,
+                        onConfirm = { onSend(EditorController.STRATEGY_CONFIRM_COMMAND) },
+                        onReject = { onSend(EditorController.STRATEGY_REJECT_COMMAND) },
+                    )
+                }
+            }
             state.pendingPlan?.let { pending -> item("pending_${pending.id.value}") { AiPlanCard(pending, state.previewingPending, onPreview, onApply, onReject) } }
-            if (state.aiChat.stage !in setOf(AiChatStage.IDLE, AiChatStage.DONE, AiChatStage.PLAN_READY, AiChatStage.ERROR, AiChatStage.CANCELLED)) item("status") { AiStatusIndicator(state.aiChat.stage, state.aiChat.statusText.orEmpty(), onCancel) }
+            if (state.aiChat.stage !in setOf(AiChatStage.IDLE, AiChatStage.DONE, AiChatStage.STRATEGY_READY, AiChatStage.PLAN_READY, AiChatStage.ERROR, AiChatStage.CANCELLED)) {
+                item("status") { AiStatusIndicator(state.aiChat.stage, state.aiChat.statusText.orEmpty(), onCancel) }
+            }
         }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
-            OutlinedTextField(input, { input = it }, Modifier.weight(1f), placeholder = { Text(if (state.pendingPlan != null) "عدّل الخطة…" else "اكتب أمرًا مثل: احذف الصمت") }, maxLines = 4)
-            IconButton(onClick = { val text = input.trim(); if (text.isNotEmpty()) { if (state.pendingPlan != null) onRevise(text) else onSend(text); input = "" } }, enabled = input.isNotBlank(), modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
+            OutlinedTextField(
+                input,
+                { input = it },
+                Modifier.weight(1f),
+                placeholder = { Text(if (state.pendingPlan != null) "عدّل الخطة…" else if (state.pendingStrategy != null) "اكتب توجيهًا جديدًا لتغيير الاستراتيجية…" else "اكتب أمرًا مثل: احذف الصمت") },
+                maxLines = 4,
+            )
+            IconButton(onClick = {
+                val text = input.trim()
+                if (text.isNotEmpty()) {
+                    if (state.pendingPlan != null) onRevise(text) else onSend(text)
+                    input = ""
+                }
+            }, enabled = input.isNotBlank(), modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
                 Icon(Icons.Default.Send, "إرسال")
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoUseStrategyCard(
+    strategy: PendingEditStrategy,
+    onConfirm: () -> Unit,
+    onReject: () -> Unit,
+) {
+    ElevatedCard(Modifier.fillMaxWidth().semantics { contentDescription = "استراتيجية المونتاج قبل التنفيذ" }) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AccountTree, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text("استراتيجية المونتاج", style = MaterialTheme.typography.titleMedium)
+            }
+            Text(
+                "لن يتم إنشاء أو تطبيق أي قص قبل اعتماد هذه الاستراتيجية.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(strategy.summary, style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content))
+            HorizontalDivider()
+            Text("سيتم تثبيت القطوع على حدود الكلمات، مع هامش آمن حولها ومعاينة قابلة للتراجع.", style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onConfirm, modifier = Modifier.weight(1f)) { Text("اعتماد الاستراتيجية") }
+                OutlinedButton(onReject) { Text("رفض") }
             }
         }
     }
