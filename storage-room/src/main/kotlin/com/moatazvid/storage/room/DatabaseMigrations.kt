@@ -62,5 +62,28 @@ object DatabaseMigrations {
         db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_transitions_outgoingClipId_incomingClipId ON transitions(outgoingClipId, incomingClipId)")
     }
 
-    val ALL = arrayOf(FROM_1_TO_2, FROM_2_TO_3, FROM_3_TO_4)
+    /** Adds durable video-use session memory without changing any existing editing/media tables. */
+    val FROM_4_TO_5 = Migration(4, 5) { db ->
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS video_use_sessions (" +
+                "sessionId TEXT NOT NULL PRIMARY KEY, " +
+                "projectId TEXT NOT NULL, " +
+                "projectRevision INTEGER NOT NULL, " +
+                "phase TEXT NOT NULL, " +
+                "userInstruction TEXT NOT NULL, " +
+                "strategyText TEXT, " +
+                "strategyStatus TEXT, " +
+                "editPlanId TEXT, " +
+                "editSummary TEXT, " +
+                "selfEvaluationJson TEXT, " +
+                "userFeedback TEXT, " +
+                "createdAtEpochMs INTEGER NOT NULL, " +
+                "updatedAtEpochMs INTEGER NOT NULL, " +
+                "FOREIGN KEY(projectId) REFERENCES projects(projectId) ON DELETE CASCADE)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_video_use_sessions_projectId ON video_use_sessions(projectId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_video_use_sessions_projectId_updatedAtEpochMs ON video_use_sessions(projectId, updatedAtEpochMs)")
+    }
+
+    val ALL = arrayOf(FROM_1_TO_2, FROM_2_TO_3, FROM_3_TO_4, FROM_4_TO_5)
 }
