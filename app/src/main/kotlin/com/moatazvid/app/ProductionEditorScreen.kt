@@ -45,6 +45,8 @@ fun ProductionEditorScreen(
     val gateway = remember(projectId.value) { ProductionSpeechEditorGateway(repository, speechRuntime) }
     val player = remember(projectId.value) { ProductionEditorPlayer(context, repository, surfaceView, runtimeScope) }
     val persistence = remember(projectId.value) { SharedPreferencesEditorStatePersistence(context) }
+    val thumbnails = remember(projectId.value) { ProductionThumbnailRepository(context, repository) }
+    val waveforms = remember(projectId.value) { ProductionWaveformRepository(context, repository) }
     val sessionMemory = remember(projectId.value) { ProductionVideoUseSessionMemory(repository) }
     val aiData = remember(projectId.value) {
         VideoUseProductionAiDataSource(ProductionSpeechAiDataSource(repository, speechRuntime))
@@ -67,6 +69,8 @@ fun ProductionEditorScreen(
             ai = ai,
             persistence = persistence,
             scope = runtimeScope,
+            thumbnails = thumbnails,
+            waveforms = waveforms,
         )
     }
     val viewModel = remember(projectId.value) { EditorViewModel(controller) }
