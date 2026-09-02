@@ -1,18 +1,21 @@
 # Third-Party Notices
 
-Moataz vid may use ideas, adapted rules, or portions derived from the following open-source project:
+Moataz vid uses and adapts open-source components and ideas under their respective licenses. This file records provenance that is important to the production application.
 
 ## video-use
 
 - Source: https://github.com/browser-use/video-use
+- Android port pinned against upstream revision: `9575612f066aa517354790a645fd90f9f95a743b`
 - Copyright © 2026 Browser Use
 - License: MIT License
 
 The original MIT license text is preserved in:
 
-`assets/licenses/video-use-MIT.txt`
+`app/src/main/assets/licenses/video-use-MIT.txt`
 
-Moataz vid does not adopt video-use as its application architecture. Any reuse must remain traceable and comply with the original license notice.
+Moataz vid intentionally ports the **load-bearing video-use editing workflow and production-correctness invariants** into Android-native Kotlin. This includes transcript-first/audio-first reasoning, packed phrase transcripts, explicit strategy confirmation before execution, word-boundary-safe cuts and padding, boundary fades, captions-last composition, output-timeline timing, transcript caching, verification/self-evaluation before publication, and persistent session memory.
+
+The Android application does **not** execute or bundle the upstream Python helpers as its runtime architecture. Equivalent behavior is implemented through typed Kotlin modules (`video-use-core`, `ai-editor-core`, `speech-core`, `media-engine`, `media3-adapter` and the production app integration) using local Whisper, Room, MediaCodec and Media3. The provenance remains traceable through this notice, source comments/tests and the pinned revision above.
 
 ## whisper.cpp
 
@@ -21,7 +24,7 @@ Moataz vid does not adopt video-use as its application architecture. Any reuse m
 - Copyright © 2023–2026 The ggml authors
 - License: MIT License
 
-The native speech runtime is included as the `third_party/whisper.cpp` Git submodule. The license text is preserved in `assets/licenses/whisper.cpp-MIT.txt`.
+The native speech runtime is included as the `third_party/whisper.cpp` Git submodule. The license text is preserved in `app/src/main/assets/licenses/whisper.cpp-MIT.txt`.
 
 ## AndroidX Media3
 
@@ -41,10 +44,10 @@ Kotlin and kotlinx.coroutines / kotlinx.serialization are third-party dependenci
 
 ## FFmpeg status
 
-Moataz vid contains a typed `FfmpegNativeBridge` abstraction and an `FfmpegLicensePolicy`, but **no FFmpeg native binary is currently bundled in this repository**. Therefore no FFmpeg binary license is being represented as satisfied here.
+Moataz vid contains a typed `FfmpegNativeBridge` abstraction and an `FfmpegLicensePolicy`, but **no FFmpeg native binary is bundled in this repository or APK**. Android production preview/export uses Media3/Transformer.
 
-Before a final distributable includes FFmpeg, its exact `configure` flags, enabled external libraries and resulting LGPL/GPL/nonfree obligations must be inspected from the actual build. The current V1 policy rejects `--enable-gpl`, `--enable-nonfree`, and explicitly rejects external `libx264`, `libx265` and `libfdk_aac` in the configured fallback build until a deliberate licensing decision is made.
+Before any distributable includes FFmpeg, its exact `configure` flags, enabled external libraries and resulting LGPL/GPL/nonfree obligations must be inspected from the actual build. The current V1 fallback policy rejects `--enable-gpl`, `--enable-nonfree`, and explicitly rejects external `libx264`, `libx265` and `libfdk_aac` until a deliberate licensing and distribution decision is made.
 
 ## Fonts and creative assets
 
-No proprietary font is introduced by stages 8–9. Any future bundled font, logo, LUT, music or other creative asset must carry distribution-compatible license metadata before it is shipped.
+No proprietary font, LUT, music or other third-party creative asset is knowingly bundled by the production core. Any future bundled font, logo, LUT, music or creative asset must carry distribution-compatible license metadata before it is shipped.
