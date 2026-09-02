@@ -12,10 +12,10 @@ android {
         applicationId = "com.moatazvid.app"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        ndk { abiFilters += listOf("arm64-v8a") }
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     buildFeatures {
@@ -45,6 +45,7 @@ dependencies {
     implementation(project(":media3-adapter"))
     implementation(project(":speech-core"))
     implementation(project(":speech-android"))
+    implementation(project(":video-use-core"))
     implementation(project(":ai-provider-core"))
     implementation(project(":ai-provider-android"))
     implementation(project(":ai-editor-core"))
