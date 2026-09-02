@@ -73,7 +73,13 @@ jobs:
           DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
           RELEASE_UNSIGNED="app/build/outputs/apk/release/app-release-unsigned.apk"
           RELEASE_DIRECT="app/build/outputs/apk/release/app-release.apk"
+          AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
+          ZIPALIGN="$ANDROID_HOME/build-tools/36.0.0/zipalign"
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
 
+          test -x "$AAPT"
+          test -x "$ZIPALIGN"
+          test -x "$APKSIGNER"
           test -f "$DEBUG_APK"
           cp "$DEBUG_APK" release-artifacts/Moataz-vid-1.0.1-android8plus-arm64-debug.apk
 
@@ -90,40 +96,41 @@ jobs:
 
           for apk in release-artifacts/*.apk; do
             echo "### $(basename "$apk")" >> "$GITHUB_STEP_SUMMARY"
-            aapt dump badging "$apk" | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)" | tee -a "$GITHUB_STEP_SUMMARY"
-            zipalign -c 4 "$apk"
+            "$AAPT" dump badging "$apk" | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)" | tee -a "$GITHUB_STEP_SUMMARY"
+            "$ZIPALIGN" -c 4 "$apk"
             if unzip -l "$apk" | grep -q 'lib/x86_64/'; then
               echo "Unexpected x86_64 native library in production artifact: $apk" >&2
               exit 1
             fi
-            if ! aapt dump badging "$apk" | grep -q "sdkVersion:'26'"; then
+            if ! "$AAPT" dump badging "$apk" | grep -q "sdkVersion:'26'"; then
               echo "APK does not declare Android 8.0 / API 26 minimum: $apk" >&2
               exit 1
             fi
-            if ! aapt dump badging "$apk" | grep -q "native-code: 'arm64-v8a'"; then
+            if ! "$AAPT" dump badging "$apk" | grep -q "native-code: 'arm64-v8a'"; then
               echo "APK is not ARM64-only: $apk" >&2
               exit 1
             fi
           done
 
-          apksigner verify --verbose release-artifacts/Moataz-vid-1.0.1-android8plus-arm64-debug.apk
+          "$APKSIGNER" verify --verbose release-artifacts/Moataz-vid-1.0.1-android8plus-arm64-debug.apk
           sha256sum release-artifacts/*.apk | tee release-artifacts/SHA256SUMS.txt
       - name: Sign release APK when production signing secrets are configured
         if: ${{ env.RELEASE_KEYSTORE_B64 != '' && env.RELEASE_KEY_ALIAS != '' && env.RELEASE_STORE_PASSWORD != '' && env.RELEASE_KEY_PASSWORD != '' }}
         run: |
           set -euxo pipefail
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
           UNSIGNED="release-artifacts/Moataz-vid-1.0.1-android8plus-arm64-release-unsigned.apk"
           SIGNED="release-artifacts/Moataz-vid-1.0.1-android8plus-arm64-release-signed.apk"
           test -f "$UNSIGNED"
           printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > /tmp/moataz-release.jks
-          apksigner sign \
+          "$APKSIGNER" sign \
             --ks /tmp/moataz-release.jks \
             --ks-key-alias "$RELEASE_KEY_ALIAS" \
             --ks-pass "pass:$RELEASE_STORE_PASSWORD" \
             --key-pass "pass:$RELEASE_KEY_PASSWORD" \
             --out "$SIGNED" \
             "$UNSIGNED"
-          apksigner verify --verbose --print-certs "$SIGNED" | tee -a "$GITHUB_STEP_SUMMARY"
+          "$APKSIGNER" verify --verbose --print-certs "$SIGNED" | tee -a "$GITHUB_STEP_SUMMARY"
           rm -f /tmp/moataz-release.jks
           sha256sum release-artifacts/*.apk | tee release-artifacts/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
