@@ -5,6 +5,7 @@ dependencies {
     api(project(":ai-editor-core"))
     api(project(":speech-core"))
     api(project(":media-engine"))
+    implementation(project(":video-use-core"))
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotlinx.coroutines.test)
