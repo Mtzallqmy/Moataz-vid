@@ -139,7 +139,15 @@ private fun VideoUseStrategyCard(
     }
 }
 
-@Composable private fun ProviderMissingCard() { ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp)) { Text("لم يتم إعداد مزود ذكاء اصطناعي بعد."); Row { Button({}) { Text("إعداد مزود") }; Spacer(Modifier.width(8.dp)); OutlinedButton({}) { Text("الوظائف المحلية") } } } } }
+@Composable
+private fun ProviderMissingCard() {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("لم يتم إعداد مزود ذكاء اصطناعي بعد.", style = MaterialTheme.typography.titleSmall)
+            Text("افتح إعدادات AI من شريط الأدوات العلوي لاختيار المزود والنموذج. أدوات القص المحلية تبقى متاحة بدون مزود.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
 
 @Composable fun TranscriptPanel(state: EditorUiState, onSearch: (String) -> Unit, onSeek: (com.moatazvid.speech.TranscriptSearchHit) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -148,7 +156,12 @@ private fun VideoUseStrategyCard(
         Text("النص والتوقيت", style = MaterialTheme.typography.titleLarge)
         OutlinedTextField(query, { query = it; onSearch(it) }, Modifier.fillMaxWidth().padding(vertical = 8.dp), leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("ابحث داخل الكلام") }, singleLine = true)
         if (transcript == null) {
-            ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text("لا يوجد تفريغ صوتي لهذا المشروع."); Button({}) { Text("بدء التفريغ") } } }
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("لا يوجد تفريغ صوتي لهذا المشروع.")
+                    Text("استخدم زر إعدادات التفريغ المحلي في شريط الأدوات العلوي لتثبيت نموذج Whisper وبدء التفريغ.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
         } else LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (query.isNotBlank()) items(state.transcriptSearch, key = { "${it.sourceId.value}_${it.sourceRange.start.value}" }) { hit ->
                 ListItem(headlineContent = { Text(hit.text) }, supportingContent = { Text("${hit.sourceId.value} · ${formatDuration(hit.sourceRange.start.value)}") }, modifier = Modifier.clickable { onSeek(hit) })
