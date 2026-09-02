@@ -81,6 +81,8 @@ jobs:
       - name: Prepare distributable build artifacts
         run: |
           set -euxo pipefail
+          AAPT="$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt"
+          test -x "$AAPT"
           mkdir -p release-artifacts
           cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/Moataz-vid-1.1.0-debug.apk
           if [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
@@ -92,10 +94,10 @@ jobs:
             cp app/build/outputs/bundle/release/app-release.aab release-artifacts/Moataz-vid-1.1.0-release.aab
           fi
           sha256sum release-artifacts/* | tee release-artifacts/SHA256SUMS.txt
-          aapt dump badging release-artifacts/Moataz-vid-1.1.0-debug.apk | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)" | tee -a "$GITHUB_STEP_SUMMARY"
+          "$AAPT" dump badging release-artifacts/Moataz-vid-1.1.0-debug.apk | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "### Native libraries" >> "$GITHUB_STEP_SUMMARY"
           unzip -l release-artifacts/Moataz-vid-1.1.0-debug.apk | grep -E 'lib/(arm64-v8a|x86_64)/.*\.so' | head -60 >> "$GITHUB_STEP_SUMMARY" || true
-          aapt dump badging release-artifacts/Moataz-vid-1.1.0-debug.apk | grep "native-code:" | grep "arm64-v8a" | grep "x86_64"
+          "$AAPT" dump badging release-artifacts/Moataz-vid-1.1.0-debug.apk | grep "native-code:" | grep "arm64-v8a" | grep "x86_64"
       - uses: actions/upload-artifact@v4
         with:
           name: moataz-vid-production-builds
