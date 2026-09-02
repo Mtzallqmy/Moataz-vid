@@ -15,6 +15,7 @@ android {
 
 dependencies {
     api(project(":media-engine"))
+    implementation(project(":video-use-core"))
     implementation(libs.media3.common)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.transformer)
