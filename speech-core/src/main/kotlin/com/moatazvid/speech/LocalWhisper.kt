@@ -5,6 +5,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.log10
 
 data class NativeWord(val text: String, val startUs: Long, val endUs: Long, val probability: Float?, val type: TranscriptWordType = TranscriptWordType.WORD)
 data class NativeSegment(val text: String, val startUs: Long, val endUs: Long, val probability: Float?, val words: List<NativeWord>)
@@ -42,6 +43,25 @@ object AudioPreprocessor {
             mono[left] * (1f - fraction) + mono[right] * fraction
         }
     }
+}
+
+/**
+ * Prevents local ASR from treating an effectively silent selected track as speech. The -60 dBFS
+ * floor mirrors the protection added to the pinned video-use transcription helper. Quiet chunks
+ * are skipped instead of being sent to Whisper, which also reduces silence hallucinations.
+ */
+object AudioSignalQuality {
+    const val EFFECTIVELY_SILENT_DBFS = -60.0
+
+    fun rmsDbfs(samples: FloatArray): Double {
+        if (samples.isEmpty()) return Double.NEGATIVE_INFINITY
+        val meanSquare = samples.sumOf { sample -> sample.toDouble() * sample } / samples.size
+        if (meanSquare <= 1e-12) return Double.NEGATIVE_INFINITY
+        return 10.0 * log10(meanSquare)
+    }
+
+    fun isUsable(samples: FloatArray, thresholdDbfs: Double = EFFECTIVELY_SILENT_DBFS): Boolean =
+        rmsDbfs(samples) > thresholdDbfs
 }
 
 data class ChunkingPolicy(val chunkDuration: DurationUs = DurationUs(30_000_000), val overlap: DurationUs = DurationUs(1_500_000)) {
@@ -142,13 +162,21 @@ class LocalWhisperProvider(
             flow.emit(TranscriptionEvent.Started(request.jobId, null))
             var completed = checkpoint?.completedChunkExclusive ?: request.resumeFromChunk
             var committedThrough = checkpoint?.lastCommittedSourceTime ?: TimeUs(0)
+            var sawUsableSignal = (checkpoint?.committedWordCount ?: 0) > 0
+            var detectedLanguage = request.language.tag
             request.audio.chunks(completed).collect { chunk ->
                 if (flag.get()) throw CancellationException("cancelled")
-                val result = when (val nativeResult = native.transcribe(handle, chunk.samplesMono16Khz, request.language.tag, true, flag::get)) {
-                    is SpeechResult.Success -> nativeResult.value
-                    is SpeechResult.Failure -> throw SpeechFailure(nativeResult.error)
+                val accepted = if (AudioSignalQuality.isUsable(chunk.samplesMono16Khz)) {
+                    sawUsableSignal = true
+                    val result = when (val nativeResult = native.transcribe(handle, chunk.samplesMono16Khz, request.language.tag, true, flag::get)) {
+                        is SpeechResult.Success -> nativeResult.value
+                        is SpeechResult.Failure -> throw SpeechFailure(nativeResult.error)
+                    }
+                    detectedLanguage = result.language
+                    TranscriptOverlapReconciler().accept(chunk, result, committedThrough)
+                } else {
+                    emptyList()
                 }
-                val accepted = TranscriptOverlapReconciler().accept(chunk, result, committedThrough)
                 val newSegments = accepted.map { segment ->
                     val segmentId = TranscriptSegmentId(ids.next("segment"))
                     TranscriptSegment(segmentId, transcriptId, request.sourceId, allSegments.size,
@@ -157,17 +185,23 @@ class LocalWhisperProvider(
                         segment.words.forEach { word ->
                             allWords += TranscriptWord(TranscriptWordId(ids.next("word")), transcriptId, segmentId, request.sourceId, allWords.size,
                                 word.text, ArabicTextNormalizer.normalize(word.text), TimeRangeUs(TimeUs(word.startUs), TimeUs(maxOf(word.endUs, word.startUs + 1))),
-                                word.probability, LanguageCode(if (result.language == "auto") request.language.tag else result.language), null, word.type)
+                                word.probability, LanguageCode(if (detectedLanguage == "auto") request.language.tag else detectedLanguage), null, word.type)
                         }
                     }
                 }
                 allSegments += newSegments
                 completed = chunk.index + 1
                 committedThrough = TimeUs(maxOf(committedThrough.value, chunk.sourceStart.value + chunk.duration.value - chunk.overlapBefore.value))
-                checkpoint = TranscriptionCheckpoint(request.jobId, request.sourceFingerprint, completed, allWords.size, allSegments.size, committedThrough, clock())
+                checkpoint = TranscriptionCheckpoint(request.jobId, request.sourceFingerprint, completed,
+                    (checkpoint?.committedWordCount ?: 0).coerceAtLeast(0) + allWords.size,
+                    (checkpoint?.committedSegmentCount ?: 0).coerceAtLeast(0) + allSegments.size,
+                    committedThrough, clock())
                 store.checkpoint(checkpoint!!, newSegments, allWords.takeLast(accepted.sumOf { it.words.size }))
                 flow.emit(TranscriptionEvent.Partial(request.jobId, checkpoint!!, newSegments, allWords.takeLast(accepted.sumOf { it.words.size })))
                 flow.emit(TranscriptionEvent.Progress(request.jobId, completed, null, DurationUs(committedThrough.value)))
+            }
+            if (!sawUsableSignal) {
+                throw SpeechFailure(SpeechError.CorruptedAudio(request.sourceId, "Selected audio is effectively silent (<= ${AudioSignalQuality.EFFECTIVELY_SILENT_DBFS.toInt()} dBFS)"))
             }
             val finished = clock()
             val transcript = Transcript(transcriptId, request.sourceId, request.streamId, request.language, TranscriptStatus.READY, pack.id, request.sourceFingerprint, 1, now, finished)
