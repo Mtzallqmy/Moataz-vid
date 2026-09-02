@@ -6,6 +6,7 @@ import com.moatazvid.core.ProjectColorMode
 import com.moatazvid.core.ProjectId
 import com.moatazvid.media.*
 import com.moatazvid.media.media3.*
+import com.moatazvid.videouse.VideoUseSelfEvaluationReport
 import java.util.UUID
 import kotlinx.coroutines.flow.first
 
@@ -14,7 +15,11 @@ class ProductionVideoExporter(
     private val repository: ProductionProjectRepository,
 ) {
     data class Progress(val stage: JobStage, val percent: Double?)
-    data class Completed(val destinationUri: String, val verification: OutputVerification)
+    data class Completed(
+        val destinationUri: String,
+        val verification: OutputVerification,
+        val selfEvaluation: VideoUseSelfEvaluationReport,
+    )
 
     private val appContext = context.applicationContext
     private val graphMapper = ProductionRenderGraphMapper()
@@ -25,6 +30,7 @@ class ProductionVideoExporter(
     private val codecDetector = AndroidCodecCapabilityDetector()
     private val outputTargets = AndroidAtomicOutputTargetFactory(appContext)
     private val verifier = OutputVerifier(AndroidOutputInspector(appContext))
+    private val selfEvaluator = AndroidVideoUseSelfEvaluator(appContext)
 
     suspend fun export(
         projectId: ProjectId,
@@ -57,10 +63,16 @@ class ProductionVideoExporter(
             "No compatible H.264 encoder for ${settings.width}x${settings.height}@${settings.frameRate.asDouble()}"
         }
 
+        // One final lossy Media3 Transformer pass. All correctness policy is applied to this single
+        // composition rather than producing intermediate re-encoded media.
+        val composition = VideoUseMedia3Policy.normalize(compositionMapper.map(graph, preferProxy = false))
+        val preflight = VideoUseMedia3Policy.inspect(composition)
+        check(preflight.passed) { "Render preflight failed: ${preflight.issues.joinToString()}" }
+
         val target = outputTargets.saf(destination)
         val id = "export-${UUID.randomUUID()}"
         onProgress(Progress(JobStage.QUEUED, 0.0))
-        val handle = when (val start = transformer.export(id, compositionMapper.map(graph, preferProxy = false), target.temporaryUri, settings)) {
+        val handle = when (val start = transformer.export(id, composition, target.temporaryUri, settings)) {
             is MediaResult.Success -> start.value
             is MediaResult.Failure -> {
                 target.abort()
@@ -75,14 +87,32 @@ class ProductionVideoExporter(
             target.abort()
             error("Export ${terminal.stage.name.lowercase()}")
         }
+
         onProgress(Progress(JobStage.FINALIZING, 100.0))
         val verification = verifier.verify(target.temporaryUri, graph, settings)
         if (!verification.valid) {
             target.abort()
             error("Export verification failed: ${verification.issues.joinToString()}")
         }
+
+        val cutTimes = graph.videoLayers
+            .map { it.placement.start.value + it.placement.duration.value }
+            .filter { it > 0 && it < graph.duration.value }
+            .distinct()
+            .sorted()
+        val selfEvaluation = selfEvaluator.evaluate(
+            uri = target.temporaryUri,
+            expectedDurationUs = graph.duration.value,
+            cutTimesUs = cutTimes,
+            pass = 1,
+        )
+        if (!selfEvaluation.passed) {
+            target.abort()
+            error("Self-evaluation failed: ${selfEvaluation.issues.joinToString { it.code }}")
+        }
+
         check(target.commit()) { "Could not publish the verified export" }
-        Completed(target.publishedUri ?: destination.toString(), verification)
+        Completed(target.publishedUri ?: destination.toString(), verification, selfEvaluation)
     }
 
     private fun recommendedBitrate(width: Int, height: Int, fps: Double): Long =
