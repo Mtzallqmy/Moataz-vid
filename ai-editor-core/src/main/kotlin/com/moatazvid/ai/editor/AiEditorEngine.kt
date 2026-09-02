@@ -3,7 +3,6 @@ package com.moatazvid.ai.editor
 import com.moatazvid.ai.provider.*
 import com.moatazvid.core.*
 import com.moatazvid.speech.*
-import com.moatazvid.storage.StorageError
 import kotlinx.coroutines.CancellationException
 
 enum class AiEditorStage {
@@ -79,6 +78,7 @@ class AiEditorEngine(
     private val proposalClient: EditPlanProposalClient,
     private val ids: EditorIdFactory = SequentialEditorIdFactory(),
     private val validator: EditPlanValidator = EditPlanValidator(),
+    private val videoUseValidator: VideoUsePlanValidator = VideoUsePlanValidator(),
     private val pending: PendingEditCoordinator = PendingEditCoordinator(store),
     private val intents: ArabicIntentClassifier = ArabicIntentClassifier(),
     private val policy: AiEditorPolicy = AiEditorPolicy(),
@@ -195,12 +195,22 @@ class AiEditorEngine(
         previous: PendingEditTransaction? = null,
         onProgress: (AiEditorProgress) -> Unit = {},
     ): AiEditorResult {
+        val transcriptWords = data.transcriptWords(project.snapshot.project.id)
+
         deterministicPlan(project, message)?.let { plan ->
+            val validation = validatePlan(plan, project, transcriptWords)
+            if (!validation.valid) {
+                return AiEditorResult.Failure(
+                    "edit_plan.video_use_invariant",
+                    validation.errors.joinToString { "${it.code}:${it.path}" },
+                )
+            }
             onProgress(AiEditorProgress(AiEditorStage.SIMULATING, "أحاكي التعديلات…"))
-            return pending.create(ids.pending(), plan, null, "local-deterministic").let {
+            return pending.create(ids.pending(), validation.normalizedPlan, null, "local-deterministic").let {
                 if (it.status == PendingEditStatus.READY) AiEditorResult.PlanReady(it, intent) else AiEditorResult.Failure("edit_plan.invalid")
             }
         }
+
         onProgress(AiEditorProgress(AiEditorStage.BUILDING_CONTEXT, "أجمع بيانات المشروع اللازمة…"))
         val context = contextBuilder.build(project.snapshot.project.id, project.revision, message, intent, policy.contextBudget)
         val requirements = TaskRequirements(
@@ -217,24 +227,34 @@ class AiEditorEngine(
             is LlmResult.Success -> proposed.value.copy(previousPlanId = previous?.editPlan?.id, baseProjectRevision = project.revision)
             is LlmResult.Failure -> return AiEditorResult.Failure(proposed.error.userMessageKey)
         }
-        var validation = validator.validate(plan, project)
+        var validation = validatePlan(plan, project, transcriptWords)
         repeat(policy.maxRepairAttempts) { attempt ->
             if (validation.valid) return@repeat
             onProgress(AiEditorProgress(AiEditorStage.REPAIRING_PLAN, "أصحح خطة غير صالحة…"))
-            val validIds = project.snapshot.items.map { it.id.value }.toSet() + project.snapshot.tracks.map { it.id.value } + project.sources.map { it.id.value }
+            val validIds = project.snapshot.items.map { it.id.value }.toSet() +
+                project.snapshot.tracks.map { it.id.value } +
+                project.sources.map { it.id.value }
             plan = when (val repaired = proposalClient.repair(model, plan, validation.errors, validIds, attempt + 1)) {
                 is LlmResult.Success -> repaired.value.copy(previousPlanId = previous?.editPlan?.id, baseProjectRevision = project.revision)
                 is LlmResult.Failure -> return AiEditorResult.Failure(repaired.error.userMessageKey)
             }
-            validation = validator.validate(plan, project)
+            validation = validatePlan(plan, project, transcriptWords)
         }
-        if (!validation.valid) return AiEditorResult.Failure("edit_plan.invalid_after_repair", validation.errors.joinToString { it.code })
+        if (!validation.valid) {
+            return AiEditorResult.Failure(
+                "edit_plan.invalid_after_repair",
+                validation.errors.joinToString { "${it.code}:${it.path}" },
+            )
+        }
+
         onProgress(AiEditorProgress(AiEditorStage.SIMULATING, "أحاكي التعديلات…"))
         val created = pending.create(ids.pending(), validation.normalizedPlan, model.provider.profile.id, model.descriptor.id)
         return if (created.status == PendingEditStatus.READY) {
             onProgress(AiEditorProgress(AiEditorStage.PLAN_READY, "الخطة جاهزة للمعاينة"))
             AiEditorResult.PlanReady(created, intent)
-        } else AiEditorResult.Failure("edit_plan.simulation_failed", created.simulationResult.unsupportedOperations.joinToString())
+        } else {
+            AiEditorResult.Failure("edit_plan.simulation_failed", created.simulationResult.unsupportedOperations.joinToString())
+        }
     }
 
     suspend fun revisePendingEdit(
@@ -272,12 +292,38 @@ class AiEditorEngine(
         is CommitResult.Failure -> AiEditorResult.Failure("redo.unavailable", result.error.toString())
     }
 
+    private fun validatePlan(
+        plan: EditPlan,
+        project: AiEditableProject,
+        transcriptWords: List<TranscriptWord>,
+    ): PlanValidationResult {
+        val base = validator.validate(plan, project)
+        val videoUseErrors = videoUseValidator.validate(base.normalizedPlan, project, transcriptWords)
+        val errors = base.errors + videoUseErrors
+        return PlanValidationResult(
+            valid = errors.none { it.severity == ValidationSeverity.ERROR },
+            normalizedPlan = base.normalizedPlan,
+            errors = errors,
+        )
+    }
+
     private suspend fun deterministicPlan(project: AiEditableProject, message: String): EditPlan? {
         val lower = message.lowercase()
         if ("صمت" in lower || "silence" in lower) {
-            val threshold = Regex("(\\d+(?:[.,]\\d+)?)\\s*(ثانية|ثوان|second|sec)").find(lower)?.groupValues?.get(1)?.replace(',', '.')?.toDoubleOrNull()
-            val commandPolicy = threshold?.let { SilenceEditPolicy(minimumDetectedSilence = DurationUs((it * 1_000_000).toLong())) } ?: SilenceEditPolicy()
-            return SilenceCommandPlanner(ids, commandPolicy).plan(project, data.silence(project.snapshot.project.id), data.transcriptWords(project.snapshot.project.id))
+            val threshold = Regex("(\\d+(?:[.,]\\d+)?)\\s*(ثانية|ثوان|second|sec)")
+                .find(lower)
+                ?.groupValues
+                ?.get(1)
+                ?.replace(',', '.')
+                ?.toDoubleOrNull()
+            val commandPolicy = threshold?.let {
+                SilenceEditPolicy(minimumDetectedSilence = DurationUs((it * 1_000_000).toLong()))
+            } ?: SilenceEditPolicy()
+            return SilenceCommandPlanner(ids, commandPolicy).plan(
+                project,
+                data.silence(project.snapshot.project.id),
+                data.transcriptWords(project.snapshot.project.id),
+            )
         }
         if (lower.contains("أفضل محاولة") || lower.contains("أفضل take") || lower.contains("best take")) {
             return BestTakePlanner(ids).plan(project, data.takeGroups(project.snapshot.project.id))
