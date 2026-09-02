@@ -115,16 +115,18 @@ class ProductionSpeechAiDataSource(
                 updatedAtEpochMs = now,
             )
         )
-        if (constraint.sourceId != null && constraint.sourceRange != null) {
+        val sourceId = constraint.sourceId
+        val sourceRange = constraint.sourceRange
+        if (sourceId != null && sourceRange != null) {
             repository.database.projectDao().upsertProtectedRange(
                 ProtectedRangeEntity(
                     protectedRangeId = "protected_${constraint.id.value}",
                     projectId = constraint.projectId.value,
                     scope = "SOURCE",
-                    sourceId = constraint.sourceId.value,
+                    sourceId = sourceId.value,
                     sequenceId = null,
-                    startUs = constraint.sourceRange.start.value,
-                    endUs = constraint.sourceRange.endExclusive.value,
+                    startUs = sourceRange.start.value,
+                    endUs = sourceRange.endExclusive.value,
                     protectionFlags = 1L,
                     reason = constraint.text,
                     createdBy = constraint.createdBy,
